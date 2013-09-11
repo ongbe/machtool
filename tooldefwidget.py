@@ -301,13 +301,13 @@ class ToolDefWidget(QWidget):
         self.metricCheckBox.show()
         self.loadToolButton.show()
         self.saveToolButton.show()
-        self.metricCheckBox.setChecked(self.toolDef.isMetric())
         self.toolBrowser.hide()
         self.vLayout.removeWidget(self.toolBrowser)
+        # this will trigger a resize event which will trigger a fitAll
         self.vLayout.addWidget(self.tdefView)
         self.tdefView.show()
         self.tdefView.setFocus()
-        self.tdefView.fitAll()
+        self.metricCheckBox.setChecked(self.toolDef.isMetric())
     def onMetricToggle(self, state):
         self.toolDef.config({'metric': state})
         self.tdefView.fitAll()
