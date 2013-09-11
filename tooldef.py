@@ -39,9 +39,6 @@ from PyQt4.QtCore import Qt as qt
 from dimension import TextLabel, DimText, LinearDim, RadiusDim, AngleDim
 from arc import Arc
 
-# mirror about the vertical axis
-mirTx = QTransform().scale(-1.0, 1.0)
-
 
 class CommentText(TextLabel):
     """Display the tool comment
@@ -54,16 +51,17 @@ class ToolDefException(Exception):
 
 
 # TODO: inherit from QGraphicsPathItem
-class ToolDef(QGraphicsItem):
+class ToolDef(QGraphicsPathItem):
     def __init__(self, specs):
         super(ToolDef, self).__init__()
         self.specs = copy(specs)
         self.checkSpecs()       # call subclasses method
         self.dirty = False
         self.ppath = QPainterPath()
-        self.pen = QPen(QColor(0, 0, 255))
-        self.pen.setWidth(2)       # 2 pixels wide
-        self.pen.setCosmetic(True) # don't scale line width
+        pen = QPen(QColor(0, 0, 255))
+        pen.setWidth(2)         # 2 pixels wide
+        pen.setCosmetic(True)   # don't scale line width
+        self.setPen(pen)
         self.commentText = CommentText()
         self.commentText.font.setBold(True)
         self.commentText.setToolTip("name")
@@ -163,15 +161,8 @@ class ToolDef(QGraphicsItem):
                 self.setDirty(True)
                 break
         self.specs.update(copy(specs))
-    def boundingRect(self):
-        return self.ppath.boundingRect()
-    def paint(self, painter, option, widget):
-        painter.setPen(self.pen)
-        painter.drawPath(self.ppath)
-        # XXX: temporary to show the origin
-        # painter.setPen(QPen(QColor(64, 255, 64)))
-        # painter.drawLine(QLineF(-2, 0, 2, 0))
-        # painter.drawLine(QLineF(0, -2, 0, 5))
+    def sceneBoundingRect(self):
+        return self.path().boundingRect()
     def isMetric(self):
         return self.specs.get('metric', False)
     def isDirty(self):
@@ -330,7 +321,7 @@ class DrillDef(ToolDef):
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(p3[0], p3[1])
-        self.ppath = pp
+        self.setPath(pp)
         return [p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen, sdia, flen]
     def _updateDims(self, p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen,
                     sdia, flen):
@@ -490,7 +481,7 @@ class SpotDrillDef(ToolDef):
         pp.lineTo(-p3[0], p3[1])
         pp.lineTo(-p2[0], p2[1])
         pp.lineTo(*p1)
-        self.ppath = pp
+        self.setPath(pp)
         return p1, p2, p3, p4, dia, oal
     def _updateDims(self, p1, p2, p3, p4, dia, oal):
         metric = self.specs['metric']
@@ -594,7 +585,7 @@ class CenterDrillDef(ToolDef):
         pp.lineTo(-p3[0], p3[1])
         pp.lineTo(-p2[0], p2[1])
         pp.lineTo(*p1)
-        self.ppath = pp
+        self.setPath(pp)
         return p1, p2, p3, p4, p5, p6, oal
     def _updateDims(self, p1, p2, p3, p4, p5, p6, oal):
         # There's only a fixed number of center drill sizes AFAIK so no need
@@ -691,7 +682,7 @@ class EndMillDef(ToolDef):
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
-        self.ppath = pp
+        self.setPath(pp)
         return p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen):
         """Attempt to intelligently position the dimensions and name label.
@@ -803,7 +794,7 @@ class BallMillDef(EndMillDef):
         # flute
         pp.moveTo(0.0, 0.0)
         pp.lineTo(*p3)
-        self.ppath = pp
+        self.setPath(pp)
         return p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen):
         """Attempt to intelligently position the dimensions and name label.
@@ -949,7 +940,7 @@ class BullMillDef(EndMillDef):
         # flute
         pp.moveTo(-frad + r, 0.0)
         pp.lineTo(*p4)
-        self.ppath = pp
+        self.setPath(pp)
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen, r
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen,
                     r):
@@ -1146,7 +1137,7 @@ class WoodruffMillDef(ToolDef):
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(p3[0], p3[1])
-        self.ppath = pp
+        self.setPath(pp)
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia,
                     flen):
@@ -1334,7 +1325,7 @@ class RadiusMillDef(ToolDef):
         pp.arcTo(rect, 90, -90)
         pp.lineTo(-p2[0], p2[1])
         pp.lineTo(*p1)
-        self.ppath = pp
+        self.setPath(pp)
         return p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal, bdia, blen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal,
                     bdia, blen):
