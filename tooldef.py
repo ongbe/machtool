@@ -161,6 +161,9 @@ class ToolDef(QGraphicsPathItem):
                 self.setDirty(True)
                 break
         self.specs.update(copy(specs))
+    # TODO: The default sceneBoundingRect() will not work because the pen is
+    #       cosmetic with a width of 2. Probably still not correct, but it
+    #       works ok for now. 
     def sceneBoundingRect(self):
         return self.path().boundingRect()
     def isMetric(self):

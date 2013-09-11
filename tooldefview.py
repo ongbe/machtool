@@ -39,38 +39,31 @@ class ToolDefView(QGraphicsView):
     def updatePixelSize(self):
         sz = self.mapToScene(QRect(0, 0, 1, 1)).boundingRect().width()
         self.scene().pixelSize = sz
+        return sz
     def fitAll(self):
         """Fit tool profile and dimensions into the view.
-
-        This sucks donkey balls.
 
         Because the dimension labels do not scale, a half-assed iterative
         approach is used to position and fit them.
         """
         items = [x for x in self.scene().items()]
-        # first fit the tool profile, this will get the scene scale in the
-        # ballpark
-        r = QRectF()
-        for item in items:
-            if isinstance(item, ToolDef):
-                r = r.united(item.sceneBoundingRect())
-        self.fitInView(r, qt.KeepAspectRatio)
-        # now place the dimensions using the ballpark scale
-        self.updatePixelSize()
-        for item in items:
-            if isinstance(item, ToolDef):
-                item.config()
-        # now refit everything... thrisely!
-        for n in range(3):
+        ps = self.updatePixelSize()
+        iters = 1
+        while True:
             r = QRectF()
             for item in items:
                 if not item.parentItem():
                     r = r.united(item.sceneBoundingRect())
             self.fitInView(r, qt.KeepAspectRatio)
-            self.updatePixelSize()
+            pps = self.updatePixelSize()
             for item in items:
                 if isinstance(item, ToolDef):
                     item.config()
+            if iters == 10 or abs(ps - self.scene().pixelSize) < 0.0001:
+                break
+            ps = pps
+            iters += 1
+        print 'cnt', cnt
     def resizeEvent(self, e):
         super(ToolDefView, self).resizeEvent(e)
         self.fitAll()
