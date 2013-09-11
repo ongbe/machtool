@@ -190,60 +190,35 @@ class ToolDef(QGraphicsItem):
         if change == self.ItemSceneChange:
             self.sceneChange(value.toPyObject())
         return super(ToolDef, self).itemChange(change, value)
-    def _updateDiaDim(self, dim, p1, p2, dia, metric):
-        """Update the tool's diameter dimension.
+    def _updateDiaDim(self, dim, p1, p2, dia, ybase, yFactor, metric):
+        """Update a tool's diameter dimension.
 
         dim -- Dimension to update
         p1 -- [x, y], 1st ref point
         p2 -- [x, y], 2nd ref point
         dia -- diameter
+        ybase -- y coordinate to offset from, if None use p1's y (p1[1])
+        yFactor -- the signed % of the dimension's bbox height to offset
+                   from the ref points
         metric -- Is the tool metric? I could just call self.specs['metric']
                   but this way it's only called once in _updateDims() and
                   passed here.
         """
+        y = p1[1] if ybase is None else ybase
         tr = dim.dimText.sceneBoundingRect()
         ar = dim.arrow1.sceneBoundingRect()
         outside = True
         # label inside witness lines
         if tr.width() * 1.1 < dia:
-            labelP = QPointF(0.0, tr.height() * -.75)
+            labelP = QPointF(0.0, y + tr.height() * yFactor)
             if tr.width() * 1.1 + ar.width() * 2.1 < dia:
                 outside = False
         # label left of witness lines
         else:
-            labelP = QPointF(-p2[0] - tr.width(), tr.height() * -.75)
+            labelP = QPointF(-p2[0] - tr.width(), y + tr.height() * yFactor)
             if ar.width() * 2.1 < dia:
                 outside = False
         dim.config({'value': dia,
-                    'ref1': QPointF(*p1),
-                    'ref2': QPointF(*p2),
-                    'outside': outside,
-                    'format': '%.3fmm' if metric else '%.4f"',
-                    'pos': labelP})
-    def _updateShankDiaDim(self, dim, p1, p2, sdia, metric):
-        """Update the tool's shank diameter dimension.
-
-        dim -- Dimension to update
-        p1 -- [x, y], 1st ref point
-        p2 -- [x, y], 2nd ref point
-        sdia -- shanke diameter
-        metric -- Is the tool metric?
-        """
-        tr = dim.dimText.sceneBoundingRect()
-        ar = dim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < sdia:
-            labelP = QPointF(0.0, p2[1] + tr.height() * .75)
-            if tr.width() * 1.1 + ar.width() * 2.1 < sdia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(p1[0] - tr.width(),
-                             p1[1] + tr.height() * .75)
-            if ar.width() * 2.1 < sdia:
-                outside = False
-        dim.config({'value': sdia,
                     'ref1': QPointF(*p1),
                     'ref2': QPointF(*p2),
                     'outside': outside,
@@ -390,8 +365,8 @@ class DrillDef(ToolDef):
                             'format': '%.3fmm' if metric else '%.4f"',
                             'pos': labelP})
         # shank diameter dimension
-        self._updateShankDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5,
-                                sdia, metric)
+        self._updateDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia, None,
+                           .75, metric)
         # flute len dimension
         fltr = self.fluteLenDim.dimText.sceneBoundingRect()
         ar = self.fluteLenDim.arrow1.sceneBoundingRect()
@@ -530,7 +505,8 @@ class SpotDrillDef(ToolDef):
                               'format': u'%.2f°'})
         # diameter dimension
         # A spot drill generally has the same shank dia as tip dia
-        self._updateShankDiaDim(self.diaDim, [-p3[0], p3[1]], p3, dia, metric)
+        self._updateDiaDim(self.diaDim, [-p3[0], p3[1]], p3, dia, None, .75,
+                           metric)
         # OAL dimension
         tr = self.oalDim.dimText.sceneBoundingRect()
         ar = self.oalDim.arrow1.sceneBoundingRect()
@@ -720,12 +696,13 @@ class EndMillDef(ToolDef):
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen):
         """Attempt to intelligently position the dimensions and name label.
         """
-        # flute diameter dimension
         metric = self.specs['metric']
-        self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, metric)
+        # flute diameter dimension
+        self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, None, -.75,
+                           metric)
         # shank diameter dimension
-        self._updateShankDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia,
-                                metric)
+        self._updateDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia, None,
+                           .75, metric)
         # flute len dimension
         fltr = self.fluteLenDim.dimText.sceneBoundingRect()
         ar = self.fluteLenDim.arrow1.sceneBoundingRect()
@@ -833,10 +810,11 @@ class BallMillDef(EndMillDef):
         """
         metric = self.specs['metric']
         # flute diameter dimension
-        self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, metric)
+        self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, 0.0, -.75,
+                           metric)
         # shank diameter dimension
-        self._updateShankDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia,
-                                metric)
+        self._updateDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia, None,
+                           .75, metric)
         # flute len dimension
         fltr = self.fluteLenDim.dimText.sceneBoundingRect()
         ar = self.fluteLenDim.arrow1.sceneBoundingRect()
@@ -979,10 +957,11 @@ class BullMillDef(EndMillDef):
         """
         metric = self.specs['metric']
         # dia dimensions
-        self._updateDiaDim(self.diaDim, [-p3[0], p3[1]], p3, dia, metric)
+        self._updateDiaDim(self.diaDim, [-p3[0], p3[1]], p3, dia, 0.0, -.75,
+                           metric)
         # shank diameter dimension
-        self._updateShankDiaDim(self.shankDiaDim, [-p6[0], p6[1]], p6, sdia,
-                                metric)
+        self._updateDiaDim(self.shankDiaDim, [-p6[0], p6[1]], p6, sdia, None,
+                           .75, metric)
         # flute len dimension
         fltr = self.fluteLenDim.dimText.sceneBoundingRect()
         ar = self.fluteLenDim.arrow1.sceneBoundingRect()
@@ -1173,30 +1152,14 @@ class WoodruffMillDef(ToolDef):
                     flen):
         metric = self.specs['metric']
         # dia dimension
-        self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, metric)
+        self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, None, -.75,
+                           metric)
         # shank diameter dimension
-        self._updateShankDiaDim(self.shankDiaDim, [-p6[0], p6[1]], p6, sdia,
-                                metric)
+        self._updateDiaDim(self.shankDiaDim, [-p6[0], p6[1]], p6, sdia, None,
+                           .75, metric)
         # neck diameter dimension
-        tr = self.neckDiaDim.dimText.sceneBoundingRect()
-        ar = self.neckDiaDim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < ndia:
-            labelP = QPointF(0.0, p4[1] + tr.height() * 2)
-            if tr.width() * 1.1 + ar.width() * 2.1 < ndia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(-p4[0] - tr.width(), p4[1] + tr.height() * 2)
-            if ar.width() * 2.1 < ndia:
-                outside = False
-        self.neckDiaDim.config({'value': ndia,
-                                'ref1': QPointF(-p4[0], p4[1]),
-                                'ref2': QPointF(*p4),
-                                'outside': outside,
-                                'format': '%.3fmm' if metric else '%.4f"',
-                                'pos': labelP})
+        self._updateDiaDim(self.neckDiaDim, [-p4[0], p4[1]], p4, ndia, None,
+                           2.0, metric)
         # flute len dimension
         fltr = self.fluteLenDim.dimText.sceneBoundingRect()
         ar = self.fluteLenDim.arrow1.sceneBoundingRect()
@@ -1377,30 +1340,14 @@ class RadiusMillDef(ToolDef):
                     bdia, blen):
         metric = self.specs['metric']
         # tip dia dimension
-        self._updateDiaDim(self.tipDiaDim, [-p2[0], p2[1]], p2, tdia, metric)
+        self._updateDiaDim(self.tipDiaDim, [-p2[0], p2[1]], p2, tdia, None,
+                           -.75, metric)
         # shank diameter dimension
-        self._updateShankDiaDim(self.shankDiaDim, [-p8[0], p8[1]], p8, sdia,
-                                metric)
+        self._updateDiaDim(self.shankDiaDim, [-p8[0], p8[1]], p8, sdia, None,
+                           .75, metric)
         # body diameter dimension
-        tr = self.bodyDiaDim.dimText.sceneBoundingRect()
-        ar = self.bodyDiaDim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < bdia:
-            labelP = QPointF(0.0, p6[1] - tr.height() * .75)
-            if tr.width() * 1.1 + ar.width() * 2.1 < bdia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(-p6[0] - tr.width(), p6[1] - tr.height() * .75)
-            if ar.width() * 2.1 < bdia:
-                outside = False
-        self.bodyDiaDim.config({'value': bdia,
-                                'ref1': QPointF(-p6[0], p6[1]),
-                                'ref2': QPointF(*p6),
-                                'outside': outside,
-                                'format': '%.3fmm' if metric else '%.4f"',
-                                'pos': labelP})
+        self._updateDiaDim(self.bodyDiaDim, [-p6[0], p6[1]], p6, bdia, None,
+                           .75, metric)
         # body len dimension
         bltr = self.bodyLengthDim.dimText.sceneBoundingRect()
         ar = self.bodyLengthDim.arrow1.sceneBoundingRect()
