@@ -220,14 +220,47 @@ class ToolDef(QGraphicsItem):
                     'outside': outside,
                     'format': '%.3fmm' if metric else '%.4f"',
                     'pos': labelP})
+    def _updateShankDiaDim(self, dim, p1, p2, sdia, metric):
+        """Update the tool's shank diameter dimension.
+
+        dim -- Dimension to update
+        p1 -- [x, y], 1st ref point
+        p2 -- [x, y], 2nd ref point
+        sdia -- shanke diameter
+        metric -- Is the tool metric?
+        """
+        tr = dim.dimText.sceneBoundingRect()
+        ar = dim.arrow1.sceneBoundingRect()
+        outside = True
+        # label inside witness lines
+        if tr.width() * 1.1 < sdia:
+            labelP = QPointF(0.0, p2[1] + tr.height() * .75)
+            if tr.width() * 1.1 + ar.width() * 2.1 < sdia:
+                outside = False
+        # label left of witness lines
+        else:
+            labelP = QPointF(p1[0] - tr.width(),
+                             p1[1] + tr.height() * .75)
+            if ar.width() * 2.1 < sdia:
+                outside = False
+        dim.config({'value': sdia,
+                    'ref1': QPointF(*p1),
+                    'ref2': QPointF(*p2),
+                    'outside': outside,
+                    'format': '%.3fmm' if metric else '%.4f"',
+                    'pos': labelP})
     def _updateCommentText(self, labelAbove, y, boxHeight):
+        """Update the tool's comment label.
+
+        labelAbove -- oal dimension position flag
+        y -- largest geometry y coordinate
+        boxHeight -- label box height in screen coords
+        """
         labelYfactor = 2.0
         if labelAbove:
             labelYfactor = 3.0
         labelP = QPointF(0, y + boxHeight * labelYfactor)
         self.commentText.config({'pos': labelP, 'text': self.specs['name']})
-        
-
     
 
 class DrillDef(ToolDef):
@@ -357,26 +390,8 @@ class DrillDef(ToolDef):
                             'format': '%.3fmm' if metric else '%.4f"',
                             'pos': labelP})
         # shank diameter dimension
-        tr = self.shankDiaDim.dimText.sceneBoundingRect()
-        ar = self.shankDiaDim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < sdia:
-            labelP = QPointF(0.0, p5[1] + tr.height() * .75)
-            if tr.width() * 1.1 + ar.width() * 2.1 < sdia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(-p5[0] - tr.width(),
-                             p5[1] + tr.height() * .75)
-            if ar.width() * 2.1 < sdia:
-                outside = False
-        self.shankDiaDim.config({'value': sdia,
-                                 'ref1': QPointF(-p5[0], p5[1]),
-                                 'ref2': QPointF(p5[0], p5[1]),
-                                 'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
-                                 'pos': labelP})
+        self._updateShankDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5,
+                                sdia, metric)
         # flute len dimension
         fltr = self.fluteLenDim.dimText.sceneBoundingRect()
         ar = self.fluteLenDim.arrow1.sceneBoundingRect()
@@ -431,7 +446,7 @@ class DrillDef(ToolDef):
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
-        self._updateCommentText(labelAbove, p5[1] + oal, tr.height())
+        self._updateCommentText(labelAbove, p5[1], tr.height())
     def _update(self):
         self._updateDims(*self._updateProfile())
 
@@ -514,26 +529,8 @@ class SpotDrillDef(ToolDef):
                               'quadV': QVector2D(0, -1),
                               'format': u'%.2f°'})
         # diameter dimension
-        tr = self.diaDim.dimText.sceneBoundingRect()
-        ar = self.diaDim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < dia:
-            labelP = QPointF(0.0, oal + tr.height() * .75)
-            if tr.width() * 1.1 + ar.width() * 2.1 < dia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(-p3[0] - tr.width(),
-                             oal + tr.height() * .75)
-            if ar.width() * 2.1 < dia:
-                outside = False
-        self.diaDim.config({'value': dia,
-                            'ref1': QPointF(-p3[0], p3[1]),
-                            'ref2': QPointF(p3[0], p3[1]),
-                            'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
-                            'pos': labelP})
+        # A spot drill generally has the same shank dia as tip dia
+        self._updateShankDiaDim(self.diaDim, [-p3[0], p3[1]], p3, dia, metric)
         # OAL dimension
         tr = self.oalDim.dimText.sceneBoundingRect()
         ar = self.oalDim.arrow1.sceneBoundingRect()
@@ -727,25 +724,8 @@ class EndMillDef(ToolDef):
         metric = self.specs['metric']
         self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, metric)
         # shank diameter dimension
-        tr = self.shankDiaDim.dimText.sceneBoundingRect()
-        ar = self.shankDiaDim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < sdia:
-            labelP = QPointF(0.0, oal + tr.height() * .75)
-            if tr.width() * 1.1 + ar.width() * 2.1 < sdia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(-p5[0] - tr.width(), oal + tr.height() * .75)
-            if ar.width() * 2.1 < sdia:
-                outside = False
-        self.shankDiaDim.config({'value': sdia,
-                                 'ref1': QPointF(-p5[0], p5[1]),
-                                 'ref2': QPointF(*p5),
-                                 'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
-                                 'pos': labelP})
+        self._updateShankDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia,
+                                metric)
         # flute len dimension
         fltr = self.fluteLenDim.dimText.sceneBoundingRect()
         ar = self.fluteLenDim.arrow1.sceneBoundingRect()
@@ -855,25 +835,8 @@ class BallMillDef(EndMillDef):
         # flute diameter dimension
         self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, metric)
         # shank diameter dimension
-        tr = self.shankDiaDim.dimText.sceneBoundingRect()
-        ar = self.shankDiaDim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < sdia:
-            labelP = QPointF(0.0, oal + tr.height() * .75)
-            if tr.width() * 1.1 + ar.width() * 2.1 < sdia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(-p5[0] - tr.width(), oal + tr.height() * .75)
-            if ar.width() * 2.1 < sdia:
-                outside = False
-        self.shankDiaDim.config({'value': sdia,
-                                 'ref1': QPointF(-p5[0], p5[1]),
-                                 'ref2': QPointF(*p5),
-                                 'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
-                                 'pos': labelP})
+        self._updateShankDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia,
+                                metric)
         # flute len dimension
         fltr = self.fluteLenDim.dimText.sceneBoundingRect()
         ar = self.fluteLenDim.arrow1.sceneBoundingRect()
@@ -1018,25 +981,8 @@ class BullMillDef(EndMillDef):
         # dia dimensions
         self._updateDiaDim(self.diaDim, [-p3[0], p3[1]], p3, dia, metric)
         # shank diameter dimension
-        tr = self.shankDiaDim.dimText.sceneBoundingRect()
-        ar = self.shankDiaDim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < sdia:
-            labelP = QPointF(0.0, oal + tr.height() * .75)
-            if tr.width() * 1.1 + ar.width() * 2.1 < sdia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(-p6[0] - tr.width(), oal + tr.height() * .75)
-            if ar.width() * 2.1 < sdia:
-                outside = False
-        self.shankDiaDim.config({'value': sdia,
-                                 'ref1': QPointF(-p6[0], p6[1]),
-                                 'ref2': QPointF(p6[0], p6[1]),
-                                 'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
-                                 'pos': labelP})
+        self._updateShankDiaDim(self.shankDiaDim, [-p6[0], p6[1]], p6, sdia,
+                                metric)
         # flute len dimension
         fltr = self.fluteLenDim.dimText.sceneBoundingRect()
         ar = self.fluteLenDim.arrow1.sceneBoundingRect()
@@ -1229,25 +1175,8 @@ class WoodruffMillDef(ToolDef):
         # dia dimension
         self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, metric)
         # shank diameter dimension
-        tr = self.shankDiaDim.dimText.sceneBoundingRect()
-        ar = self.shankDiaDim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < sdia:
-            labelP = QPointF(0.0, oal + tr.height() * .75)
-            if tr.width() * 1.1 + ar.width() * 2.1 < sdia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(-p6[0] - tr.width(), oal + tr.height() * .75)
-            if ar.width() * 2.1 < sdia:
-                outside = False
-        self.shankDiaDim.config({'value': sdia,
-                                 'ref1': QPointF(-p6[0], p6[1]),
-                                 'ref2': QPointF(*p6),
-                                 'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
-                                 'pos': labelP})
+        self._updateShankDiaDim(self.shankDiaDim, [-p6[0], p6[1]], p6, sdia,
+                                metric)
         # neck diameter dimension
         tr = self.neckDiaDim.dimText.sceneBoundingRect()
         ar = self.neckDiaDim.arrow1.sceneBoundingRect()
@@ -1450,25 +1379,8 @@ class RadiusMillDef(ToolDef):
         # tip dia dimension
         self._updateDiaDim(self.tipDiaDim, [-p2[0], p2[1]], p2, tdia, metric)
         # shank diameter dimension
-        tr = self.shankDiaDim.dimText.sceneBoundingRect()
-        ar = self.shankDiaDim.arrow1.sceneBoundingRect()
-        outside = True
-        # label inside witness lines
-        if tr.width() * 1.1 < sdia:
-            labelP = QPointF(0.0, oal + tr.height() * .75)
-            if tr.width() * 1.1 + ar.width() * 2.1 < sdia:
-                outside = False
-        # label left of witness lines
-        else:
-            labelP = QPointF(-p8[0] - tr.width(), oal + tr.height() * .75)
-            if ar.width() * 2.1 < sdia:
-                outside = False
-        self.shankDiaDim.config({'value': sdia,
-                                 'ref1': QPointF(-p8[0], p8[1]),
-                                 'ref2': QPointF(*p8),
-                                 'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
-                                 'pos': labelP})
+        self._updateShankDiaDim(self.shankDiaDim, [-p8[0], p8[1]], p8, sdia,
+                                metric)
         # body diameter dimension
         tr = self.bodyDiaDim.dimText.sceneBoundingRect()
         ar = self.bodyDiaDim.arrow1.sceneBoundingRect()
