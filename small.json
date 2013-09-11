@@ -1,0 +1,44 @@
+{
+ "Flat End Mill": [
+  {
+   "shankDia": 0.125, 
+   "name": "1/8 END MILL", 
+   "metric": false, 
+   "oal": 2.0, 
+   "dia": 0.125, 
+   "fluteLength": 0.5
+  }, 
+  {
+   "shankDia": 0.25, 
+   "name": "1/4 END MILL", 
+   "metric": false, 
+   "oal": 1.75, 
+   "dia": 0.25, 
+   "fluteLength": 0.75
+  }, 
+  {
+   "shankDia": 1.0, 
+   "name": "1.25 END MILL", 
+   "metric": false, 
+   "oal": 3.0, 
+   "dia": 1.25, 
+   "fluteLength": 1.0
+  }, 
+  {
+   "shankDia": 0.375, 
+   "name": "3/8 END MILL", 
+   "metric": false, 
+   "oal": 4.0, 
+   "dia": 0.375, 
+   "fluteLength": 1.0
+  }, 
+  {
+   "shankDia": 0.4375, 
+   "name": "7/16 END MILL", 
+   "metric": false, 
+   "oal": 4.0, 
+   "dia": 0.4375, 
+   "fluteLength": 1.0
+  }
+ ]
+}
