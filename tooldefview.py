@@ -46,7 +46,7 @@ class ToolDefView(QGraphicsView):
         Because the dimension labels do not scale, a half-assed iterative
         approach is used to position and fit them.
         """
-        items = [x for x in self.scene().items()]
+        items = self.scene().items()
         ps = self.updatePixelSize()
         iters = 1
         while True:
@@ -59,11 +59,10 @@ class ToolDefView(QGraphicsView):
             for item in items:
                 if isinstance(item, ToolDef):
                     item.config()
-            if iters == 10 or abs(ps - self.scene().pixelSize) < 0.0001:
+            if iters == 10 or abs(ps - pps) < 0.0001:
                 break
             ps = pps
             iters += 1
-        print 'cnt', cnt
     def resizeEvent(self, e):
         super(ToolDefView, self).resizeEvent(e)
         self.fitAll()
