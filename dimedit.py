@@ -153,9 +153,9 @@ class DimEdit(EditBox):
         br = fm.boundingRect('__________')
         return br.adjusted(0, 0, 10, 5).size()
     def setText(self, text):
-        """Strip R prefix, and mm, in, ", or ° suffix before setting.
+        """Strip Ø or R prefix, and mm, in, ", or ° suffix before setting.
         """
-        mo = re.match(u'R?((\d+\.\d*)|(\d*\.\d+)|\d+)(mm|°|"|in)?', text)
+        mo = re.match(u'[ØR]?((\d+\.\d*)|(\d*\.\d+)|\d+)(mm|°|"|in)?', text)
         if not mo:
             raise DimEditException('invalid dimension text')
         super(DimEdit, self).setText(mo.group(1))

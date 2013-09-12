@@ -1831,5 +1831,15 @@
    "angle": 3.0,
    "metric": false
    }
+ ],
+ "Taper Ball End Mill":
+ [{"name": "3/8 X 7DEG BALL MILL",
+  "shankDia": 0.5,
+  "dia": 0.375,
+  "fluteLength": 2.0,
+  "oal": 3.5,
+  "angle": 7.0,
+  "metric": false
+  }
  ]
 }

@@ -20,17 +20,19 @@ PD  EndMillDef
     FaceMillDef
     PlugTapDef
 PD  RadiusMillDef
+    ScribeDef        (engraving tool)
 PD  SpotDrillDef
     TaperBallMillDef
     TaperBullMillDef
-    TaperEndMillDef
+PD  TaperEndMillDef
     ThreadMillDef
+    TSlotMillDef     (different from woodruff)
 PD  WoodruffMillDef
 
 Thursday, August  8 2013
 """
 
-from math import degrees, radians, tan, sqrt, atan2, fabs
+from math import degrees, radians, tan, sqrt, atan2, fabs, sin, cos
 from copy import copy
 from operator import lt, le, eq, ne, ge, gt
 
@@ -39,7 +41,7 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import Qt as qt
 
 from dimension import TextLabel, DimText, LinearDim, RadiusDim, AngleDim
-from arc import Arc
+from arc import Arc, arcFromAngles
 
 
 class CommentText(TextLabel):
@@ -773,8 +775,10 @@ class EndMillDef(ToolDef):
         self._updateDims(*self._updateProfile())
 
 
+# TODO: Possibly create a fillet to blend the flute with the body for cases
+#       where the large end of the flute is smaller than the shank dia.
 class TaperEndMillDef(ToolDef):
-    """Define a basic flat end tapered mill shape.
+    """Define a basic tapered flat end mill shape.
     specs:
       shankDia
       dia          (tip dia)
@@ -828,9 +832,9 @@ class TaperEndMillDef(ToolDef):
         if d['fluteLength'] >= d['oal']:
             return False
         # angle >= 90
+        # TODO: what's a reasonable upper limit here?
         if d['angle'] >= 90.0:
             return False
-        # TODO: tip dia / angle / flute length
         return True
     def _updateProfile(self):
         """Create the tool's silhouette for display.
@@ -946,8 +950,207 @@ class TaperEndMillDef(ToolDef):
         v1 = QVector2D(qp2 - qp3)
         # centerline vector
         v2 = QVector2D(qp4 - qp3)
-        labelP = QPointF(-p2[0] - tr.width() * 2,
-                          tr.height() * 0.75)
+        labelP = QPointF(-p2[0] - tr.width() * 2, tr.height() * 0.75)
+        self.angleDim.config({'value': self.specs['angle'],
+                              'pos': labelP,
+                              'line1': QLineF(qp1, qp2),
+                              'line2': QLineF(qp3, qp4),
+                              'outside': True,
+                              'quadV': v1 + v2,
+                              'format': u'%.2f°'})
+        # comment label
+        self._updateCommentText(labelAbove, oal, tr.height())
+    def _update(self):
+        self._updateDims(*self._updateProfile())
+        
+
+class TaperBallMillDef(ToolDef):
+    """Define a basic tapered ball end mill shape.
+    specs:
+      shankDia
+      dia          (tip dia)
+      fluteLength
+      oal
+      angle        (half angle to vertical)
+      metric       True/False
+    """
+    def __init__(self, specs):
+        super(TaperBallMillDef, self).__init__(specs)
+        self.diaDim = RadiusDim()
+        self.diaDim.setToolTip("dia")
+        self.shankDiaDim = LinearDim()
+        self.shankDiaDim.setToolTip("shankDia")
+        self.fluteLenDim = LinearDim()
+        self.fluteLenDim.setToolTip("fluteLength")
+        self.oalDim = LinearDim()
+        self.oalDim.setToolTip("oal")
+        self.angleDim = AngleDim()
+        self.angleDim.setToolTip("angle")
+    def sceneChange(self, scene):
+        super(TaperBallMillDef, self).sceneChange(scene)
+        if scene:
+            scene.addItem(self.diaDim)
+            scene.addItem(self.shankDiaDim)
+            scene.addItem(self.fluteLenDim)
+            scene.addItem(self.oalDim)
+            scene.addItem(self.angleDim)
+        else:
+            self.scene().removeItem(self.diaDim)
+            self.scene().removeItem(self.shankDiaDim)
+            self.scene().removeItem(self.fluteLenDim)
+            self.scene().removeItem(self.oalDim)
+            self.scene().removeItem(self.angleDim)
+    def config(self, specs={}):
+        ""
+        self.prepareGeometryChange()
+        super(TaperBallMillDef, self).config(specs)
+        self._update()
+    def checkSpecs(self):
+        super(TaperBallMillDef, self).checkSpecs()
+        self._checkSpec('shankDia', [gt, 0.0])
+        self._checkSpec('dia', [gt, 0.0])
+        self._checkSpec('fluteLength', [gt, 0.0])
+        self._checkSpec('oal', [gt, 0.0])
+        self._checkSpec('angle', [gt, 0.0], [lt, 90.0])
+    def checkGeometry(self, specs={}):
+        d = copy(self.specs)
+        d.update(specs)
+        # flute length < oal
+        if d['fluteLength'] >= d['oal']:
+            return False
+        # angle >= 90
+        # TODO: what's a reasonable upper limit here?
+        if d['angle'] >= 90.0:
+            return False
+        return True
+    def _updateProfile(self):
+        """Create the tool's silhouette for display.
+
+        Return a tuple of parameters used by _updateDims().
+        """
+        sdia = self.specs['shankDia']
+        srad = sdia * 0.5
+        dia = self.specs['dia']
+        frad = dia * 0.5
+        flen = self.specs['fluteLength']
+        oal = self.specs['oal']
+        a = self.specs['angle']
+        ra = radians(a)
+        p2X = cos(-ra) * frad
+        p2Y = frad + sin(-ra) * frad
+        p3Y = flen
+        p3X = p2X + tan(ra) * (flen - p2Y)
+        p1 = [0.0, 0.0]
+        p2 = [p2X, p2Y]
+        p3 = [p3X, p3Y]
+        p4 = [srad, flen]
+        p5 = [srad, oal]
+        p6 = [0.0, oal]
+        pp = QPainterPath()
+        rect = QRectF(-frad, dia, dia, -dia)
+        # right side
+        # pp.moveTo(*p1)
+        pp.arcMoveTo(rect, 180 + a)
+        pp.arcTo(rect, 180 + a, 180 - 2 * a)
+        pp.lineTo(*p3)
+        pp.lineTo(*p4)
+        pp.lineTo(*p5)
+        # left side
+        pp.lineTo(-p5[0], p5[1])
+        pp.lineTo(-p4[0], p4[1])
+        pp.lineTo(-p3[0], p3[1])
+        pp.lineTo(-p2[0], p2[1])
+        # diagonal line to show flute
+        pp.moveTo(*p1)
+        pp.lineTo(*p3)
+        self.setPath(pp)
+        return p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal, flen, a
+    def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal,
+                    flen, a):
+        """Attempt to intelligently position the dimensions and name label.
+        """
+        metric = self.specs['metric']
+        # flute diameter dimension (actaully a RadiusDim)
+        tr = self.diaDim.dimText.sceneBoundingRect()
+        labelP = QPointF(-p2[0] - tr.width(), tr.height() * -1.0)
+        arc = arcFromAngles(180 + a, -a, frad)
+        arc.center(QPointF(p1[0], frad))
+        self.diaDim.config({'value': dia,
+                            'pos': labelP,
+                            'arc': arc,
+                            'outside': True,
+                            'format':
+                                u'Ø%.3fmm' if metric else u'Ø%.4f"'})
+        # shank diameter dimension
+        self._updateDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia, None,
+                           .75, metric)
+        # flute len dimension
+        fltr = self.fluteLenDim.dimText.sceneBoundingRect()
+        ar = self.fluteLenDim.arrow1.sceneBoundingRect()
+        outside = True
+        # label inside witness lines
+        if fltr.height() * 1.1 < flen:
+            labelY = flen * 0.5
+            if fltr.height() * 1.1 + ar.height() * 2.1 < flen:
+                outside = False
+        # label below witness lines
+        else:
+            labelY = fltr.height() * -2.0
+            if ar.height() * 2.1 < flen:
+                outside = False
+        if srad > p3[0]:
+            ref2 = QPointF(*p4)
+            labelX = p4[0] + fltr.width() * .6
+        else:
+            ref2 = QPointF(*p3)
+            labelX = p3[0] + fltr.width() * .6
+        fLabelP = QPointF(labelX, labelY)
+        self.fluteLenDim.config({'value': flen,
+                                 'ref1': QPointF(*p1),
+                                 'ref2': ref2,
+                                 'outside': outside,
+                                 'format': '%.3fmm' if metric else '%.4f"',
+                                 'pos': fLabelP,
+                                 'force': 'vertical'})
+        # OAL dimension
+        tr = self.oalDim.dimText.sceneBoundingRect()
+        ar = self.oalDim.arrow1.sceneBoundingRect()
+        outside = True
+        # label inside witness lines
+        labelAbove = False
+        slen = oal - flen
+        if tr.height() * 1.1 < slen:
+            labelY = oal - slen * 0.5
+            if tr.height() * 1.1 + ar.height() * 2.1 < oal:
+                outside = False
+        # label above witness lines
+        else:
+            labelAbove = True
+            labelY = oal + tr.height() * 1.1
+            if ar.height() * 2.1 < oal:
+                outside = False
+        labelX = fLabelP.x() + fltr.width() * .6
+        labelP = QPointF(labelX, labelY)
+        self.oalDim.config({'value': oal,
+                            'ref1': QPointF(*p1),
+                            'ref2': QPointF(*p5),
+                            'outside': outside,
+                            'format': '%.3fmm' if metric else '%.4f"',
+                            'pos': labelP,
+                            'force': 'vertical'})
+        # flute angle dimension
+        tr = self.angleDim.dimText.sceneBoundingRect()
+        # left flute edge end points
+        qp1 = QPointF(-p2[0], p2[1])
+        qp2 = QPointF(-p3[0], p3[1])
+        # centerline end points
+        qp3 = QPointF(*p1)
+        qp4 = QPointF(*p6)
+        # flute edge vector
+        v1 = QVector2D(qp2 - qp3)
+        # centerline vector
+        v2 = QVector2D(qp4 - qp3)
+        labelP = QPointF(-p2[0] - tr.width() * 2, tr.height() * 0.75)
         self.angleDim.config({'value': self.specs['angle'],
                               'pos': labelP,
                               'line1': QLineF(qp1, qp2),

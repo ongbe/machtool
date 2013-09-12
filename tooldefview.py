@@ -63,7 +63,7 @@ class ToolDefView(QGraphicsView):
                 break
             ps = pps
             iters += 1
-        print 'iters', iters
+        # print 'iters', iters
     def resizeEvent(self, e):
         super(ToolDefView, self).resizeEvent(e)
         self.fitAll()
