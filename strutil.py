@@ -10,11 +10,13 @@ import re
 
 FMTIN = '%.4f"'                 # linear dimension inch format string
 FMTMM = '%.3fmm'                # linear dimension millimeter format string
-FMTAN = u'%.2f°'                # angle dimension format string
+FMTANG = u'%.2f°'               # angle dimension format string
 FMTRIN = 'R%.4f"'               # radius dimension inch format string
 FMTRMM = 'R%.3fmm'              # radius dimension millimeter format string
+FMTDIN = u'Ø%.4f"'              # diameter dimension inch format string
+FMTDMM = u'Ø%.3fmm'             # diameter dimension millimeter format string
 
-def ffmt(fmt, value):
+def dimFormat(fmt, value):
     """Format the dimension value.
 
     fmt -- format string, "%.3f" for example
@@ -42,26 +44,4 @@ def ffmt(fmt, value):
         if s[-1] == '.':
             s += '0'
     return s
-
-if __name__ == '__main__':
-    print ffmt("%.3fmm", 3.14)
-    print ffmt("%.3fmm", 3)
-    print ffmt("%.3fmm", 3.)
-    print ffmt("%.3fmm", 3.14159)
-    print ffmt('%.4f"', 3.14)
-    print ffmt('%.4f"', 3)
-    print ffmt('%.4f"', 3.)
-    print ffmt('%.4f"', 3.14159)
-    print ffmt("R%.3fmm", 3.14)
-    print ffmt("R%.3fmm", 3)
-    print ffmt("R%.3fmm", 3.)
-    print ffmt("R%.3fmm", 3.14159)
-    print ffmt('R%.3f"', 3.14)
-    print ffmt('R%.3f"', 3)
-    print ffmt('R%.3f"', 3.)
-    print ffmt('R%.3f"', 3.14159)
-    print ffmt(u'%.2f°', 3.14)
-    print ffmt(u'%.2f°', 3)
-    print ffmt(u'%.2f°', 3.)
-    print ffmt(u'%.2f°', 3.14159)
 

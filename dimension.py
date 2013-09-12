@@ -10,10 +10,10 @@ from PyQt4.QtCore import Qt as qt
 
 from arc import Arc, arcFromAngles, arcFromVectors
 from algo import (xsectLineRect1, linesCollinear, pointOnLine, pointOnArc,
-                  arcLength, isPointOnArc, xsectArcRect1, vectorToAbsAngle,
+                  isPointOnArc, xsectArcRect1, vectorToAbsAngle,
                   clamp, isPointOnLineSeg)
 
-from strutil import ffmt
+from strutil import dimFormat, FMTMM, FMTRIN, FMTANG
 
 
 class DimArrowException(Exception): pass
@@ -120,7 +120,6 @@ class DimArrow(QGraphicsPathItem):
         self.setBrush(QBrush(QColor(0, 0, 0)))
         self.setFlag(self.ItemIgnoresTransformations, True)
         self.specMap = copy(specMap)
-        # self.ppath = QPainterPath()
         self.config()
     def config(self, specMap={}):
         """Set geometry
@@ -183,8 +182,8 @@ class Dimension(QGraphicsPathItem):
         """
         self.specMap.update(specMap)
         self.dimText.config({'pos': self.specMap['pos'],
-                             'text': ffmt(self.specMap['format'],
-                                          self.specMap['value'])})
+                             'text': dimFormat(self.specMap['format'],
+                                               self.specMap['value'])})
         if self.scene() is None:
             return False
         self.prepareGeometryChange()
@@ -284,7 +283,7 @@ class LinearDim(Dimension):
                                              'ref1': QPointF(-15, 0),
                                              'ref2': QPointF(15, 0),
                                              'outside': False,
-                                             'format': '%.3fmm',
+                                             'format': FMTMM,
                                              'force': None}):
         super(LinearDim, self).__init__(parent)
         self.specMap = copy(specMap)
@@ -733,7 +732,7 @@ class RadiusDim(Dimension):
                                                          'start': 0.0,
                                                          'span': 90.0}),
                                              'outside': True,
-                                             'format': 'R%.4f'}):
+                                             'format': FMTRIN}):
         if specMap['arc'].radius() <= 0:
             raise RadiusDimException("refrenced arc radius must be > 0.0")
         super(RadiusDim, self).__init__(parent)
@@ -745,9 +744,6 @@ class RadiusDim(Dimension):
             return
         arcRadius = self.specMap['arc'].radius()
         pos = self.specMap['pos']
-        self.dimText.config({'pos': pos,
-                             'text': ffmt(self.specMap['format'],
-                                          self.specMap['value'])})
         pp = QPainterPath()
         arcCenter = self.specMap['arc'].center()
         # is the label outside the arc
@@ -893,7 +889,7 @@ class AngleDim(Dimension):
                                              'outside': False,
                                              'quadV': QVector2D(0.7071,
                                                                 0.7071),
-                                             'format': u'%.2f°'}):
+                                             'format': FMTANG}):
         if specMap['line1'].isNull() or specMap['line2'].isNull():
             raise AngleDimException("refrenced line has zero length")
         super(AngleDim, self).__init__(parent)
@@ -906,9 +902,6 @@ class AngleDim(Dimension):
             return
         pp = QPainterPath()
         labelP = self.specMap['pos']
-        self.dimText.config({'pos': labelP,
-                             'text': ffmt(self.specMap['format'],
-                                          self.specMap['value'])})
         tb = self.dimText.sceneBoundingRect()
         l1 = self.specMap['line1']
         l2 = self.specMap['line2']

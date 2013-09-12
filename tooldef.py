@@ -5,7 +5,7 @@
 
 P  -- profile defined
 D  -- dimensions defined
-S  -- surface defined
+S  -- revolved surface defined
 
 PD  BallMillDef
     BottomTapDef
@@ -22,7 +22,7 @@ PD  EndMillDef
 PD  RadiusMillDef
     ScribeDef        (engraving tool)
 PD  SpotDrillDef
-    TaperBallMillDef
+PD  TaperBallMillDef
     TaperBullMillDef
 PD  TaperEndMillDef
     ThreadMillDef
@@ -43,6 +43,7 @@ from PyQt4.QtCore import Qt as qt
 from dimension import TextLabel, DimText, LinearDim, RadiusDim, AngleDim
 from arc import Arc, arcFromAngles
 
+from strutil import *
 
 class CommentText(TextLabel):
     """Display the tool comment
@@ -56,8 +57,8 @@ class ToolDefException(Exception):
     pass
 
 
-# TODO: inherit from QGraphicsPathItem
 class ToolDef(QGraphicsPathItem):
+    # TODO: better centerline Qt's default is too tight
     centerlinePen = QPen(QBrush(QColor(128, 128, 128)), 0, qt.DashDotLine)
     def __init__(self, specs):
         super(ToolDef, self).__init__()
@@ -174,11 +175,13 @@ class ToolDef(QGraphicsPathItem):
         """
         return dia * 0.5 / tan(radians(includedAngle * 0.5))
     def config(self, specs={}):
-        for k,v in specs.iteritems():
+        for k, v in specs.iteritems():
             if self.specs[k] != v:
                 self.setDirty(True)
                 break
         self.specs.update(copy(specs))
+        self.prepareGeometryChange()
+        self._update()
     # TODO: The default sceneBoundingRect() will not work because the pen is
     #       cosmetic with a width of 2. Probably still not correct, but it
     #       works ok for now. 
@@ -234,7 +237,7 @@ class ToolDef(QGraphicsPathItem):
                     'ref1': QPointF(*p1),
                     'ref2': QPointF(*p2),
                     'outside': outside,
-                    'format': '%.3fmm' if metric else '%.4f"',
+                    'format': FMTMM if metric else FMTIN,
                     'pos': labelP})
     def _updateCommentText(self, labelAbove, y, boxHeight):
         """Update the tool's comment label.
@@ -287,12 +290,6 @@ class DrillDef(ToolDef):
             self.scene().removeItem(self.fluteLenDim)
             self.scene().removeItem(self.oalDim)
             self.scene().removeItem(self.angleDim)
-    def config(self, specs={}):
-        """Update one or more of the tool's specs.
-        """
-        super(DrillDef, self).config(specs)
-        self.prepareGeometryChange()
-        self._update()
     def checkSpecs(self):
         super(DrillDef, self).checkSpecs()
         self._checkSpec('shankDia', [gt, 0.0])
@@ -360,7 +357,7 @@ class DrillDef(ToolDef):
                               'line2': QLineF(p1[0], p1[1], -p2[0], p2[1]),
                               'outside': angle <= 135.0,
                               'quadV': QVector2D(0, -1),
-                              'format': u'%.2f°'})
+                              'format': FMTANG})
         # diameter dimension
         tr = self.diaDim.dimText.sceneBoundingRect()
         ar = self.diaDim.arrow1.sceneBoundingRect()
@@ -374,7 +371,7 @@ class DrillDef(ToolDef):
                             'ref1': QPointF(-p2[0], p2[1]),
                             'ref2': QPointF(*p2),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP})
         # shank diameter dimension
         self._updateDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia, None,
@@ -404,7 +401,7 @@ class DrillDef(ToolDef):
                                  'ref1': QPointF(*p2),
                                  'ref2': ref2,
                                  'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
+                                 'format': FMTMM if metric else FMTIN,
                                  'pos': fLabelP,
                                  'force': 'vertical'})
         # OAL dimension
@@ -429,7 +426,7 @@ class DrillDef(ToolDef):
                             'ref1': QPointF(*p2),
                             'ref2': QPointF(*p5),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
@@ -464,11 +461,6 @@ class SpotDrillDef(ToolDef):
             self.scene().removeItem(self.angleDim)
             self.scene().removeItem(self.diaDim)
             self.scene().removeItem(self.oalDim)
-    def config(self, specs={}):
-        ""
-        self.prepareGeometryChange()
-        super(SpotDrillDef, self).config(specs)
-        self._update()
     def checkSpecs(self):
         super(SpotDrillDef, self).checkSpecs()
         self._checkSpec('dia', [gt, 0.0])
@@ -514,7 +506,7 @@ class SpotDrillDef(ToolDef):
                               'line2': QLineF(p1[0], p1[1], -p2[0], p2[1]),
                               'outside': True,
                               'quadV': QVector2D(0, -1),
-                              'format': u'%.2f°'})
+                              'format': FMTANG})
         # diameter dimension
         # A spot drill generally has the same shank dia as tip dia
         self._updateDiaDim(self.diaDim, [-p3[0], p3[1]], p3, dia, None, .75,
@@ -541,7 +533,7 @@ class SpotDrillDef(ToolDef):
                             'ref1': QPointF(*p1),
                             'ref2': QPointF(*p3),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
@@ -572,11 +564,6 @@ class CenterDrillDef(ToolDef):
             pass
         else:
             pass
-    def config(self, specs={}):
-        ""
-        self.prepareGeometryChange()
-        super(CenterDrillDef, self).config(specs)
-        self._update()
     def _updateProfile(self):
         tipRadius = self.specs['tipDia'] / 2.0
         tipLength = self.specs['tipLength']
@@ -649,11 +636,6 @@ class EndMillDef(ToolDef):
             self.scene().removeItem(self.shankDiaDim)
             self.scene().removeItem(self.fluteLenDim)
             self.scene().removeItem(self.oalDim)
-    def config(self, specs={}):
-        ""
-        self.prepareGeometryChange()
-        super(EndMillDef, self).config(specs)
-        self._update()
     def checkSpecs(self):
         super(EndMillDef, self).checkSpecs()
         self._checkSpec('shankDia', [gt, 0.0])
@@ -740,7 +722,7 @@ class EndMillDef(ToolDef):
                                  'ref1': QPointF(*p2),
                                  'ref2': ref2,
                                  'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
+                                 'format': FMTMM if metric else FMTIN,
                                  'pos': fLabelP,
                                  'force': 'vertical'})
         # OAL dimension
@@ -766,7 +748,7 @@ class EndMillDef(ToolDef):
                             'ref1': QPointF(*p2),
                             'ref2': QPointF(*p5),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
@@ -813,11 +795,6 @@ class TaperEndMillDef(ToolDef):
             self.scene().removeItem(self.fluteLenDim)
             self.scene().removeItem(self.oalDim)
             self.scene().removeItem(self.angleDim)
-    def config(self, specs={}):
-        ""
-        self.prepareGeometryChange()
-        super(TaperEndMillDef, self).config(specs)
-        self._update()
     def checkSpecs(self):
         super(TaperEndMillDef, self).checkSpecs()
         self._checkSpec('shankDia', [gt, 0.0])
@@ -909,7 +886,7 @@ class TaperEndMillDef(ToolDef):
                                  'ref1': QPointF(*p2),
                                  'ref2': ref2,
                                  'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
+                                 'format': FMTMM if metric else FMTIN,
                                  'pos': fLabelP,
                                  'force': 'vertical'})
         # OAL dimension
@@ -935,7 +912,7 @@ class TaperEndMillDef(ToolDef):
                             'ref1': QPointF(*p2),
                             'ref2': QPointF(*p5),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP,
                             'force': 'vertical'})
         # flute angle dimension
@@ -957,14 +934,14 @@ class TaperEndMillDef(ToolDef):
                               'line2': QLineF(qp3, qp4),
                               'outside': True,
                               'quadV': v1 + v2,
-                              'format': u'%.2f°'})
+                              'format': FMTANG})
         # comment label
         self._updateCommentText(labelAbove, oal, tr.height())
     def _update(self):
         self._updateDims(*self._updateProfile())
         
 
-class TaperBallMillDef(ToolDef):
+class TaperBallMillDef(TaperEndMillDef):
     """Define a basic tapered ball end mill shape.
     specs:
       shankDia
@@ -978,51 +955,6 @@ class TaperBallMillDef(ToolDef):
         super(TaperBallMillDef, self).__init__(specs)
         self.diaDim = RadiusDim()
         self.diaDim.setToolTip("dia")
-        self.shankDiaDim = LinearDim()
-        self.shankDiaDim.setToolTip("shankDia")
-        self.fluteLenDim = LinearDim()
-        self.fluteLenDim.setToolTip("fluteLength")
-        self.oalDim = LinearDim()
-        self.oalDim.setToolTip("oal")
-        self.angleDim = AngleDim()
-        self.angleDim.setToolTip("angle")
-    def sceneChange(self, scene):
-        super(TaperBallMillDef, self).sceneChange(scene)
-        if scene:
-            scene.addItem(self.diaDim)
-            scene.addItem(self.shankDiaDim)
-            scene.addItem(self.fluteLenDim)
-            scene.addItem(self.oalDim)
-            scene.addItem(self.angleDim)
-        else:
-            self.scene().removeItem(self.diaDim)
-            self.scene().removeItem(self.shankDiaDim)
-            self.scene().removeItem(self.fluteLenDim)
-            self.scene().removeItem(self.oalDim)
-            self.scene().removeItem(self.angleDim)
-    def config(self, specs={}):
-        ""
-        self.prepareGeometryChange()
-        super(TaperBallMillDef, self).config(specs)
-        self._update()
-    def checkSpecs(self):
-        super(TaperBallMillDef, self).checkSpecs()
-        self._checkSpec('shankDia', [gt, 0.0])
-        self._checkSpec('dia', [gt, 0.0])
-        self._checkSpec('fluteLength', [gt, 0.0])
-        self._checkSpec('oal', [gt, 0.0])
-        self._checkSpec('angle', [gt, 0.0], [lt, 90.0])
-    def checkGeometry(self, specs={}):
-        d = copy(self.specs)
-        d.update(specs)
-        # flute length < oal
-        if d['fluteLength'] >= d['oal']:
-            return False
-        # angle >= 90
-        # TODO: what's a reasonable upper limit here?
-        if d['angle'] >= 90.0:
-            return False
-        return True
     def _updateProfile(self):
         """Create the tool's silhouette for display.
 
@@ -1049,7 +981,6 @@ class TaperBallMillDef(ToolDef):
         pp = QPainterPath()
         rect = QRectF(-frad, dia, dia, -dia)
         # right side
-        # pp.moveTo(*p1)
         pp.arcMoveTo(rect, 180 + a)
         pp.arcTo(rect, 180 + a, 180 - 2 * a)
         pp.lineTo(*p3)
@@ -1070,17 +1001,17 @@ class TaperBallMillDef(ToolDef):
         """Attempt to intelligently position the dimensions and name label.
         """
         metric = self.specs['metric']
-        # flute diameter dimension (actaully a RadiusDim)
+        # flute diameter dimension (actually a RadiusDim)
         tr = self.diaDim.dimText.sceneBoundingRect()
         labelP = QPointF(-p2[0] - tr.width(), tr.height() * -1.0)
-        arc = arcFromAngles(180 + a, -a, frad)
+        arc = arcFromAngles(180.0 + a, -a, frad)
         arc.center(QPointF(p1[0], frad))
         self.diaDim.config({'value': dia,
                             'pos': labelP,
                             'arc': arc,
                             'outside': True,
                             'format':
-                                u'Ø%.3fmm' if metric else u'Ø%.4f"'})
+                                FMTDMM if metric else FMTDIN})
         # shank diameter dimension
         self._updateDiaDim(self.shankDiaDim, [-p5[0], p5[1]], p5, sdia, None,
                            .75, metric)
@@ -1109,7 +1040,7 @@ class TaperBallMillDef(ToolDef):
                                  'ref1': QPointF(*p1),
                                  'ref2': ref2,
                                  'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
+                                 'format': FMTMM if metric else FMTIN,
                                  'pos': fLabelP,
                                  'force': 'vertical'})
         # OAL dimension
@@ -1135,7 +1066,7 @@ class TaperBallMillDef(ToolDef):
                             'ref1': QPointF(*p1),
                             'ref2': QPointF(*p5),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP,
                             'force': 'vertical'})
         # flute angle dimension
@@ -1157,11 +1088,9 @@ class TaperBallMillDef(ToolDef):
                               'line2': QLineF(qp3, qp4),
                               'outside': True,
                               'quadV': v1 + v2,
-                              'format': u'%.2f°'})
+                              'format': FMTANG})
         # comment label
         self._updateCommentText(labelAbove, oal, tr.height())
-    def _update(self):
-        self._updateDims(*self._updateProfile())
         
 
 class BallMillDef(EndMillDef):
@@ -1241,7 +1170,7 @@ class BallMillDef(EndMillDef):
                                  'ref1': QPointF(*p1),
                                  'ref2': ref2,
                                  'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
+                                 'format': FMTMM if metric else FMTIN,
                                  'pos': fLabelP,
                                  'force': 'vertical'})
         # OAL dimension
@@ -1267,7 +1196,7 @@ class BallMillDef(EndMillDef):
                             'ref1': QPointF(*p1),
                             'ref2': QPointF(*p5),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
@@ -1389,7 +1318,7 @@ class BullMillDef(EndMillDef):
                                  'ref1': QPointF(p2[0], 0.0),
                                  'ref2': ref2,
                                  'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
+                                 'format': FMTMM if metric else FMTIN,
                                  'pos': fLabelP,
                                  'force': 'vertical'})
         # OAL dimension
@@ -1414,7 +1343,7 @@ class BullMillDef(EndMillDef):
                             'ref1': QPointF(*p2),
                             'ref2': QPointF(*p6),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP,
                             'force': 'vertical'})
         # corner radius dimension
@@ -1429,7 +1358,7 @@ class BullMillDef(EndMillDef):
                                'arc': arc,
                                'outside': True,
                                'format':
-                                   'R%.3fmm' if metric else 'R%.4f"'})
+                                   FMTRMM if metric else FMTRIN})
         # comment label
         self._updateCommentText(labelAbove, oal, tr.height())
     def _update(self):
@@ -1475,11 +1404,6 @@ class WoodruffMillDef(ToolDef):
             self.scene().removeItem(self.diaDim)
             self.scene().removeItem(self.fluteLenDim)
             self.scene().removeItem(self.oalDim)
-    def config(self, specs={}):
-        ""
-        self.prepareGeometryChange()
-        super(WoodruffMillDef, self).config(specs)
-        self._update()
     def checkSpecs(self):
         super(WoodruffMillDef, self).checkSpecs()
         self._checkSpec('shankDia', [gt, 0.0])
@@ -1580,7 +1504,7 @@ class WoodruffMillDef(ToolDef):
                                  'ref1': QPointF(*p2),
                                  'ref2': QPointF(*p3),
                                  'outside': outside,
-                                 'format': '%.3fmm' if metric else '%.4f"',
+                                 'format': FMTMM if metric else FMTIN,
                                  'pos': fLabelP,
                                  'force': 'vertical'})
         # oal len dimension
@@ -1606,7 +1530,7 @@ class WoodruffMillDef(ToolDef):
                             'ref1': QPointF(*p2),
                             'ref2': QPointF(*p6),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
@@ -1663,11 +1587,6 @@ class RadiusMillDef(ToolDef):
             self.scene().removeItem(self.bodyLengthDim)
             self.scene().removeItem(self.radiusDim)
             self.scene().removeItem(self.oalDim)
-    def config(self, specs={}):
-        ""
-        self.prepareGeometryChange()
-        super(RadiusMillDef, self).config(specs)
-        self._update()
     def checkSpecs(self):
         super(RadiusMillDef, self).checkSpecs()
         self._checkSpec('shankDia', [gt, 0.0])
@@ -1768,7 +1687,7 @@ class RadiusMillDef(ToolDef):
                                    'ref1': QPointF(*p2),
                                    'ref2': QPointF(*p6),
                                    'outside': outside,
-                                   'format': '%.3fmm' if metric else '%.4f"',
+                                   'format': FMTMM if metric else FMTIN,
                                    'pos': fLabelP,
                                    'force': 'vertical'})
         # oal len dimension
@@ -1794,7 +1713,7 @@ class RadiusMillDef(ToolDef):
                             'ref1': QPointF(*p2),
                             'ref2': QPointF(*p8),
                             'outside': outside,
-                            'format': '%.3fmm' if metric else '%.4f"',
+                            'format': FMTMM if metric else FMTIN,
                             'pos': labelP,
                             'force': 'vertical'})
         # corner radius dimension
@@ -1810,7 +1729,7 @@ class RadiusMillDef(ToolDef):
                                'arc': arc,
                                'outside': True,
                                'format':
-                                   'R%.3fmm' if metric else 'R%.4f"'})
+                                   FMTRMM if metric else FMTRIN})
         # comment label
         self._updateCommentText(labelAbove, oal, tr.height())
     def _update(self):
