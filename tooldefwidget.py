@@ -18,7 +18,7 @@ from tooldefscene import ToolDefScene
 from tooldefview import ToolDefView
 from tooldef import (ToolDef, DrillDef, EndMillDef, WoodruffMillDef,
                      RadiusMillDef, SpotDrillDef, BallMillDef,
-                     CenterDrillDef, BullMillDef)
+                     CenterDrillDef, BullMillDef, TaperEndMillDef)
 
 # ToolDef class to tool category
 TDEF2CAT = {DrillDef: 'Twist Drill',
@@ -28,7 +28,8 @@ TDEF2CAT = {DrillDef: 'Twist Drill',
             SpotDrillDef: 'Spot Drill',
             BallMillDef: 'Ball End Mill',
             CenterDrillDef: 'Center Drill',
-            BullMillDef: 'Bull End Mill'}
+            BullMillDef: 'Bull End Mill',
+            TaperEndMillDef: 'Taper End Mill'}
 # Tool category to ToolDef class
 CAT2TDEF = dict([(v, k) for k,v in TDEF2CAT.iteritems()])
 

@@ -98,7 +98,7 @@ def arcLength(span, r):
     """
     return span / 360.0 * (2 * pi * r)
 
-def isPointOnArc(p, cp, start, span, r=None, eps=1e-6):
+def isPointOnArc(p, cp, start, span, r=None, eps=1e-3):
     """Find if the given point is ON the arc.
 
     p -- ref point, QPointF
@@ -124,17 +124,17 @@ def isPointOnArc(p, cp, start, span, r=None, eps=1e-6):
     else:
         return pa >= sa and pa <= ea
 
-def isPointOnLineSeg(p, l, eps=1e-6):
+def isPointOnLineSeg(p, l, eps=1e-3):
     """Find if the point is ON the line segment.
     
     p -- QPointF
     l -- QLineF
-    eps -- epsilon for checking vector parallelism
     """
-    v1 = QVector2D(l.p2() - l.p1()) # line vector
-    v2 = QVector2D(p - l.p1())
-    dp = v1.dotProduct(v1.normalized(), v2.normalized())
-    return 1.0 - dp < eps and v2.length() <= v1.length()
+    lng1 = QVector2D(p - l.p1()).length()
+    lng2 = QVector2D(p - l.p2()).length()
+    diff = abs(lng1 + lng2 - l.length())
+    # print 'diff', diff
+    return diff < eps
 
 def vectorToAbsAngle(v):
     """Find the absolute angle of the vector.

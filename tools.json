@@ -1757,5 +1757,79 @@
    "fluteLength": 1.0, 
    "radius": 0.125
   }
+ ],
+ "Taper End Mill": [
+  {"name": "3MM X 3DEG END MILL",
+   "shankDia": 6.0,
+   "dia": 3.0,
+   "fluteLength": 20.0,
+   "oal": 60.0,
+   "angle": 3.0,
+   "metric": true
+   },
+  {"name": "3MM X 5DEG END MILL",
+   "shankDia": 6.0,
+   "dia": 3.0,
+   "fluteLength": 20.0,
+   "oal": 60.0,
+   "angle": 5.0,
+   "metric": true
+   },
+  {"name": "4MM X 1DEG END MILL",
+   "shankDia": 6.0,
+   "dia": 4.0,
+   "fluteLength": 25.0,
+   "oal": 60.0,
+   "angle": 1.0,
+   "metric": true
+   },
+  {"name": "4MM X 5DEG END MILL",
+   "shankDia": 6.0,
+   "dia": 4.0,
+   "fluteLength": 25.0,
+   "oal": 60.0,
+   "angle": 5.0,
+   "metric": true
+   },
+  {"name": "6MM X 5DEG END MILL",
+   "shankDia": 12.0,
+   "dia": 6.0,
+   "fluteLength": 35.0,
+   "oal": 90.0,
+   "angle": 5.0,
+   "metric": true
+   },
+  {"name": "1/4 X 5DEG END MILL",
+   "shankDia": 0.5,
+   "dia": 0.25,
+   "fluteLength": 1,
+   "oal": 3,
+   "angle": 5.0,
+   "metric": false
+   },
+  {"name": "3/8 X 7DEG END MILL",
+   "shankDia": 0.75,
+   "dia": 0.375,
+   "fluteLength": 2.25,
+   "oal": 4.5,
+   "angle": 7.0,
+   "metric": false
+   },
+  {"name": "1/2 X 15DEG END MILL",
+   "shankDia": 1.25,
+   "dia": 0.5,
+   "fluteLength": 2.25,
+   "oal": 4.875,
+   "angle": 15.0,
+   "metric": false
+   },
+  {"name": "3/32 X 3DEG END MILL",
+   "shankDia": 0.375,
+   "dia": 0.09375,
+   "fluteLength": 1.0,
+   "oal": 2.875,
+   "angle": 3.0,
+   "metric": false
+   }
  ]
 }

@@ -47,16 +47,7 @@ class ToolDefView(QGraphicsView):
         approach is used to position and fit them.
         """
         items = self.scene().items()
-        # fit the profile first
-        r = QRectF()
-        for item in items:
-            if isinstance(item, ToolDef):
-                r = r.united(item.sceneBoundingRect())
-                # only one tool def per scene
-                break
-        self.fitInView(r, qt.KeepAspectRatio)
-        ps = self.updatePixelSize()
-        # then iter until the scale settles down
+        ps = 0
         iters = 1
         while True:
             r = QRectF()
@@ -72,7 +63,7 @@ class ToolDefView(QGraphicsView):
                 break
             ps = pps
             iters += 1
-        # print 'iters', iters
+        print 'iters', iters
     def resizeEvent(self, e):
         super(ToolDefView, self).resizeEvent(e)
         self.fitAll()

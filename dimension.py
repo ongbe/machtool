@@ -11,7 +11,7 @@ from PyQt4.QtCore import Qt as qt
 from arc import Arc, arcFromAngles, arcFromVectors
 from algo import (xsectLineRect1, linesCollinear, pointOnLine, pointOnArc,
                   arcLength, isPointOnArc, xsectArcRect1, vectorToAbsAngle,
-                  clamp)
+                  clamp, isPointOnLineSeg)
 
 from strutil import ffmt
 
@@ -200,25 +200,27 @@ class Dimension(QGraphicsPathItem):
     def _addExtensionLines(self, p1, p2, ap1, ap2, pp):
         """Add extension lines to pp
 
-        p1, p2 -- ref point locations
+        p1, p2 -- ref point locations, None to not draw that line
         ap1, ap2 -- arrow point locations
         pp -- QPainterPath
         """
-        # From p1 to arrow1
-        l1v = QVector2D(ap1 - p1)
-        l1nv = l1v.normalized()
-        # From p2 to arrow2
-        l2v = QVector2D(ap2 - p2)
-        l2nv = l2v.normalized()
         ext = self.scene().pixelsToScene(self.extensionLineExt)
         gap = self.scene().pixelsToScene(self.extensionLineGap)
-        # render only if arrow tip is not too close to ref point
-        if l1v.length() > gap:
-            pp.moveTo(p1 + (l1nv * gap).toPointF())
-            pp.lineTo(ap1 + (l1nv * ext).toPointF())
-        if l2v.length() > gap:
-            pp.moveTo(p2 + (l2nv * gap).toPointF())
-            pp.lineTo(ap2 + (l2nv * ext).toPointF())
+        if p1 is not None:      # deja fucking vu QPointF() == None
+            # From p1 to arrow1
+            l1v = QVector2D(ap1 - p1)
+            l1nv = l1v.normalized()
+            if l1v.length() > gap:
+                pp.moveTo(p1 + (l1nv * gap).toPointF())
+                pp.lineTo(ap1 + (l1nv * ext).toPointF())
+        if p2 is not None:
+            # From p2 to arrow2
+            l2v = QVector2D(ap2 - p2)
+            l2nv = l2v.normalized()
+            # render only if arrow tip is not too close to ref point
+            if l2v.length() > gap:
+                pp.moveTo(p2 + (l2nv * gap).toPointF())
+                pp.lineTo(ap2 + (l2nv * ext).toPointF())
             
 
 # TODO:
@@ -967,11 +969,13 @@ class AngleDim(Dimension):
         if dp(labelV, lVperp) > 0.0:
             if outside:
                 # leader from lable to left arrow
-                clipP = xsectArcRect1(arcFromVectors(labelV, lV, radius,
-                                                     False), tb)
+                arc = arcFromVectors(labelV, lV, radius, False)
+                arc.center(xsectP)
+                clipP = xsectArcRect1(arc, tb)
                 if clipP:
                     arc = arcFromVectors(QVector2D(clipP - xsectP), lV,
                                          radius, False)
+                    arc.center(xsectP)
                     pp.arcMoveTo(rect, arc.start())
                     pp.arcTo(rect, arc.start(), arc.span())
                 # fixed leader from right arrow
@@ -979,22 +983,27 @@ class AngleDim(Dimension):
                 pp.arcMoveTo(rect, sa)
                 pp.arcTo(rect, sa, -fixedLeaderSpan)
             else:
-                # leader from label, through left arrow, to right arrow 
-                clipP = xsectArcRect1(arcFromVectors(labelV, rV, radius,
-                                                     False), tb)
+                # leader from label, through left arrow, to right arrow
+                arc = arcFromVectors(labelV, rV, radius, False)
+                arc.center(xsectP)
+                clipP = xsectArcRect1(arc, tb)
                 if clipP:
                     arc = arcFromVectors(QVector2D(clipP - xsectP), rV,
                                          radius, False)
+                    arc.center(xsectP)
                     pp.arcMoveTo(rect, arc.start())
                     pp.arcTo(rect, arc.start(), arc.span())
         # label right of quad
         elif dp(labelV, rVperp) > 0.0:
             if outside:
                 # leader from label to right arrow
-                clipP = xsectArcRect1(arcFromVectors(labelV, rV, radius), tb)
+                arc = arcFromVectors(labelV, rV, radius)
+                arc.center(xsectP)
+                clipP = xsectArcRect1(arc, tb)
                 if clipP:
                     arc = arcFromVectors(QVector2D(clipP - xsectP), rV,
                                          radius)
+                    arc.center(xsectP)
                     pp.arcMoveTo(rect, arc.start())
                     pp.arcTo(rect, arc.start(), arc.span())
                 # fixed length leader from left arrow
@@ -1003,10 +1012,13 @@ class AngleDim(Dimension):
                 pp.arcTo(rect, sa, fixedLeaderSpan)
             else:
                 # leader from label, through right arrow, to left arrow
-                clipP = xsectArcRect1(arcFromVectors(labelV, lV, radius), tb)
+                arc = arcFromVectors(labelV, lV, radius)
+                arc.center(xsectP)
+                clipP = xsectArcRect1(arc, tb)
                 if clipP:
                     arc = arcFromVectors(QVector2D(clipP - xsectP), lV,
                                          radius)
+                    arc.center(xsectP)
                     pp.arcMoveTo(rect, arc.start())
                     pp.arcTo(rect, arc.start(), arc.span())
         # label inside quad
@@ -1046,12 +1058,19 @@ class AngleDim(Dimension):
                                 'dir': QVector2D(-lV.y(), lV.x())})
             self.arrow2.config({'pos': rAp,
                                 'dir': QVector2D(rV.y(), -rV.x())})
-        # find the end points closest to their arrow tips for extension lines
-        p1 = lL.p1()
-        if QVector2D(lAp - lL.p2()).length() < QVector2D(lAp - p1).length():
-            p1 = lL.p2()
-        p2 = rL.p1()
-        if QVector2D(rAp - rL.p2()).length() < QVector2D(rAp - p2).length():
-            p2 = lL.p2()
+        # Find the end points closest to their arrow tips for extension lines
+        # Don't render the extension if the arrow tip is on its line.
+        p1 = None
+        if not isPointOnLineSeg(lAp, lL):
+            p1 = lL.p1()
+            if QVector2D(lAp - lL.p2()).length() \
+                    < QVector2D(lAp - p1).length():
+                p1 = lL.p2()
+        p2 = None
+        if not isPointOnLineSeg(rAp, rL):
+            p2 = rL.p1()
+            if QVector2D(rAp - rL.p2()).length() \
+                    < QVector2D(rAp - p2).length():
+                p2 = rL.p2()
         self._addExtensionLines(p1, p2, lAp, rAp, pp)
         self.setPath(pp)
