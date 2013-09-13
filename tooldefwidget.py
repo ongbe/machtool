@@ -16,10 +16,7 @@ from PyQt4.QtCore import Qt as qt
 
 from tooldefscene import ToolDefScene
 from tooldefview import ToolDefView
-from tooldef import (ToolDef, DrillDef, EndMillDef, WoodruffMillDef,
-                     RadiusMillDef, SpotDrillDef, BallMillDef,
-                     CenterDrillDef, BullMillDef, TaperEndMillDef,
-                     TaperBallMillDef)
+from tooldef import *
 
 # ToolDef class to tool category
 TDEF2CAT = {DrillDef: 'Twist Drill',
@@ -31,7 +28,8 @@ TDEF2CAT = {DrillDef: 'Twist Drill',
             CenterDrillDef: 'Center Drill',
             BullMillDef: 'Bull End Mill',
             TaperEndMillDef: 'Taper End Mill',
-            TaperBallMillDef: 'Taper Ball End Mill'}
+            TaperBallMillDef: 'Taper Ball End Mill',
+            DovetailMillDef: 'Dovetail End Mill'}
 # Tool category to ToolDef class
 CAT2TDEF = dict([(v, k) for k,v in TDEF2CAT.iteritems()])
 

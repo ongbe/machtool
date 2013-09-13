@@ -28,7 +28,7 @@ class TextLabel(QGraphicsItem):
     The item consists of:
       * An empty rectangle the size of the text's bounding rect.
       * The text which is centered on this item's local origin.
-
+    
     Use the config method to update with the following specMap:
     
     String Key   Value Type   Value Description
@@ -93,7 +93,12 @@ class TextLabel(QGraphicsItem):
 
 # This exists so I can differentiate dimension text
 # from other subclasses of TextLabel. 
-class DimText(TextLabel):
+class DimLabel(TextLabel):
+    """A graphical representation of a dimension's text label.
+
+    The label is dumb. It only displays text in a given format. It has no
+    knowledge of the item it's referencing.
+    """
     pass
 
 
@@ -176,7 +181,7 @@ class Dimension(QGraphicsPathItem):
         # TODO: A proper z value. This is just a temporary value so the
         #       dimension can be selected.
         self.setZValue(100)
-        self.dimText = DimText(self) # all dimensions have a label
+        self.dimText = DimLabel(self) # all dimensions have a label
     def config(self, specMap={}):
         """Update the specs.
         """
@@ -227,7 +232,7 @@ class Dimension(QGraphicsPathItem):
 class LinearDim(Dimension):
     """Graphical representation of a linear dimension.
     
-    The dim consists of a DimText, DimArrow (x2), leader and extension lines.
+    The dim consists of a DimLabel, DimArrow (x2), leader and extension lines.
     All lines are added to this item's QPainterPath.
 
     Use the config() method to update with the following specMap. All keys
@@ -701,7 +706,7 @@ class LinearDim(Dimension):
 class RadiusDim(Dimension):
     """A graphical representation of a radius dimension.
     
-    The dim consists of a DimText, a DimArrow, and a leader line.
+    The dim consists of a DimLabel, a DimArrow, and a leader line.
     All lines are added to this item's QPainterPath.
 
     Use the config method to update with the following specMap. All keys must
@@ -856,7 +861,7 @@ class RadiusDim(Dimension):
 class AngleDim(Dimension):
     """A graphical representation of an angle dimension.
     
-    The dim consists of a DimText, a DimArrow (x2), and a leader arcs.
+    The dim consists of a DimLabel, a DimArrow (x2), and a leader arcs.
     All lines are added to this item's QPainterPath.
 
     Use the config method to update with the following specMap. All keys must

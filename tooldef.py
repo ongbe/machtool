@@ -10,7 +10,7 @@ S  -- revolved surface defined
 PD  BallMillDef
     BottomTapDef
 PD  BullMillDef
-P   CenterDrillDef   (fixed sizes, no dimensions)
+P   CenterDrillDef   (fixed sizes, no dimensions, maybe allow oal edit)
     ChamferMillDef
     CounterBoreDef
     CounterSinkDef
@@ -23,7 +23,6 @@ PD  RadiusMillDef
     ScribeDef        (engraving tool)
 PD  SpotDrillDef
 PD  TaperBallMillDef
-    TaperBullMillDef
 PD  TaperEndMillDef
     ThreadMillDef
     TSlotMillDef     (different from woodruff)
@@ -40,16 +39,19 @@ from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 from PyQt4.QtCore import Qt as qt
 
-from dimension import TextLabel, DimText, LinearDim, RadiusDim, AngleDim
+from dimension import TextLabel, LinearDim, RadiusDim, AngleDim
 from arc import Arc, arcFromAngles
 
 from strutil import *
 
-class CommentText(TextLabel):
-    """Display the tool comment
+
+mirTx = QTransform().scale(-1.0, 1.0)
+
+class CommentLabel(TextLabel):
+    """A graphical representation of a tools comment string.
     """
     def __init__(self, *args):
-        super(CommentText, self).__init__(*args)
+        super(CommentLabel, self).__init__(*args)
         self.setZValue(100)
 
 
@@ -70,9 +72,16 @@ class ToolDef(QGraphicsPathItem):
         pen.setWidth(2)         # 2 pixels wide
         pen.setCosmetic(True)   # don't scale line width
         self.setPen(pen)
-        self.commentText = CommentText()
+        self.commentText = CommentLabel()
         self.commentText.font.setBold(True)
         self.commentText.setToolTip("name")
+        # The right side of the profile as a QPainterPath. The path will
+        # transverse from the bottom of the tool to the top. This is used to
+        # create a revolved mesh.
+        self.profile = None
+        # True if there is an extra step in the profile for cases where the
+        # shankDiam != another diameter of the tool. Usually the cutter dia.
+        self.hasStep = False
     def paint(self, painter, option, widget):
         """Draw a centerline.
         """
@@ -239,7 +248,7 @@ class ToolDef(QGraphicsPathItem):
                     'outside': outside,
                     'format': FMTMM if metric else FMTIN,
                     'pos': labelP})
-    def _updateCommentText(self, labelAbove, y, boxHeight):
+    def _updateCommentLabel(self, labelAbove, y, boxHeight):
         """Update the tool's comment label.
 
         labelAbove -- oal dimension position flag
@@ -251,6 +260,8 @@ class ToolDef(QGraphicsPathItem):
             labelYfactor = 3.0
         labelP = QPointF(0, y + boxHeight * labelYfactor)
         self.commentText.config({'pos': labelP, 'text': self.specs['name']})
+    def _update(self):
+        self._updateDims(*self._updateProfile())
     
 
 class DrillDef(ToolDef):
@@ -322,20 +333,19 @@ class DrillDef(ToolDef):
         p4 = [srad, tiplen + flen]
         p5 = [srad, tiplen + oal]
         p6 = [0, tiplen + oal]
+        self.hasStep = dia != sdia
         pp = QPainterPath()
         # right side
         pp.moveTo(*p1)
         pp.lineTo(*p2)
-        pp.lineTo(*p3)
-        pp.lineTo(*p4)
+        if self.hasStep:
+            pp.lineTo(*p3)
+            pp.lineTo(*p4)
         pp.lineTo(*p5)
         pp.lineTo(*p6)
+        self.profile = QPainterPath(pp) # store just the right side profile
         # left
-        pp.lineTo(-p5[0], p5[1])
-        pp.lineTo(-p4[0], p4[1])
-        pp.lineTo(-p3[0], p3[1])
-        pp.lineTo(-p2[0], p2[1])
-        pp.lineTo(*p1)
+        pp.addPath(mirTx.map(pp))
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(p3[0], p3[1])
@@ -430,9 +440,7 @@ class DrillDef(ToolDef):
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
-        self._updateCommentText(labelAbove, p5[1], tr.height())
-    def _update(self):
-        self._updateDims(*self._updateProfile())
+        self._updateCommentLabel(labelAbove, p5[1], tr.height())
 
         
 class SpotDrillDef(ToolDef):
@@ -483,17 +491,16 @@ class SpotDrillDef(ToolDef):
         p1 = [0, 0]
         p2 = [r, self._tipLength(self.specs['angle'], dia)]
         p3 = [r, oal]
-        p4 = [r, oal]
+        p4 = [0, oal]
         pp = QPainterPath()
         # right side
         pp.moveTo(*p1)
         pp.lineTo(*p2)
         pp.lineTo(*p3)
         pp.lineTo(*p4)
+        self.profile = QPainterPath(pp)
         # left
-        pp.lineTo(-p3[0], p3[1])
-        pp.lineTo(-p2[0], p2[1])
-        pp.lineTo(*p1)
+        pp.addPath(mirTx.map(pp))
         self.setPath(pp)
         return p1, p2, p3, p4, dia, oal
     def _updateDims(self, p1, p2, p3, p4, dia, oal):
@@ -537,9 +544,7 @@ class SpotDrillDef(ToolDef):
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
-        self._updateCommentText(labelAbove, oal, tr.height())
-    def _update(self):
-        self._updateDims(*self._updateProfile())
+        self._updateCommentLabel(labelAbove, oal, tr.height())
 
 
 # TODO: bell center drill
@@ -587,12 +592,9 @@ class CenterDrillDef(ToolDef):
         pp.lineTo(*p4)
         pp.lineTo(*p5)
         pp.lineTo(*p6)
+        self.profile = QPainterPath(pp)
         # # left
-        pp.lineTo(-p5[0], p5[1])
-        pp.lineTo(-p4[0], p4[1])
-        pp.lineTo(-p3[0], p3[1])
-        pp.lineTo(-p2[0], p2[1])
-        pp.lineTo(*p1)
+        pp.addPath(mirTx.map(pp))
         self.setPath(pp)
         return p1, p2, p3, p4, p5, p6, oal
     def _updateDims(self, p1, p2, p3, p4, p5, p6, oal):
@@ -601,8 +603,6 @@ class CenterDrillDef(ToolDef):
         tr = self.commentText.sceneBoundingRect()
         self.commentText.config({'pos': QPointF(0, oal + tr.height() * .75),
                                'text': self.specs['name']})
-    def _update(self):
-        self._updateDims(*self._updateProfile())
         
         
 class EndMillDef(ToolDef):
@@ -666,23 +666,20 @@ class EndMillDef(ToolDef):
         p4 = [srad, flen]
         p5 = [srad, oal]
         p6 = [0.0, oal]
-        step = sdia != dia
+        self.hasStep = sdia != dia
         pp = QPainterPath()
         # right side
         pp.moveTo(*p1)
         pp.lineTo(*p2)
-        if step:
+        if self.hasStep:
             pp.lineTo(*p3)
             pp.lineTo(*p4)
         pp.lineTo(*p5)
+        pp.lineTo(*p6)
+        self.profile = QPainterPath(pp)
         # left side
-        pp.lineTo(-p5[0], p5[1])
-        if step:
-            pp.lineTo(-p4[0], p4[1])
-            pp.lineTo(-p3[0], p3[1])
-        pp.lineTo(-p2[0], p2[1])
-        pp.lineTo(*p1)
-        # diagonal line to show flute
+        pp.addPath(mirTx.map(pp))
+        # # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
         self.setPath(pp)
@@ -752,9 +749,7 @@ class EndMillDef(ToolDef):
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
-        self._updateCommentText(labelAbove, oal, tr.height())
-    def _update(self):
-        self._updateDims(*self._updateProfile())
+        self._updateCommentLabel(labelAbove, oal, tr.height())
 
 
 # TODO: Possibly create a fillet to blend the flute with the body for cases
@@ -801,7 +796,7 @@ class TaperEndMillDef(ToolDef):
         self._checkSpec('dia', [gt, 0.0])
         self._checkSpec('fluteLength', [gt, 0.0])
         self._checkSpec('oal', [gt, 0.0])
-        self._checkSpec('angle', [gt, 0.0], [lt, 90.0])
+        self._checkSpec('angle', [ge, 0.0])
     def checkGeometry(self, specs={}):
         d = copy(self.specs)
         d.update(specs)
@@ -809,8 +804,8 @@ class TaperEndMillDef(ToolDef):
         if d['fluteLength'] >= d['oal']:
             return False
         # angle >= 90
-        # TODO: what's a reasonable upper limit here?
-        if d['angle'] >= 90.0:
+        a = d['angle']
+        if a < 0.01 or a > 60.0:
             return False
         return True
     def _updateProfile(self):
@@ -831,20 +826,20 @@ class TaperEndMillDef(ToolDef):
         p4 = [srad, flen]
         p5 = [srad, oal]
         p6 = [0.0, oal]
-        step = sdia != dia
+        # this will probably never happen without an epsilon test
+        self.hasStep = p3[0] != srad
         pp = QPainterPath()
         # right side
         pp.moveTo(*p1)
         pp.lineTo(*p2)
         pp.lineTo(*p3)
-        pp.lineTo(*p4)
+        if self.hasStep:
+            pp.lineTo(*p4)
         pp.lineTo(*p5)
+        pp.lineTo(*p6)
+        self.profile = QPainterPath(pp)
         # left side
-        pp.lineTo(-p5[0], p5[1])
-        pp.lineTo(-p4[0], p4[1])
-        pp.lineTo(-p3[0], p3[1])
-        pp.lineTo(-p2[0], p2[1])
-        pp.lineTo(*p1)
+        pp.addPath(mirTx.map(pp))
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
@@ -936,9 +931,7 @@ class TaperEndMillDef(ToolDef):
                               'quadV': v1 + v2,
                               'format': FMTANG})
         # comment label
-        self._updateCommentText(labelAbove, oal, tr.height())
-    def _update(self):
-        self._updateDims(*self._updateProfile())
+        self._updateCommentLabel(labelAbove, oal, tr.height())
         
 
 class TaperBallMillDef(TaperEndMillDef):
@@ -978,20 +971,21 @@ class TaperBallMillDef(TaperEndMillDef):
         p4 = [srad, flen]
         p5 = [srad, oal]
         p6 = [0.0, oal]
+        self.hasStep = p3X != srad
         pp = QPainterPath()
         rect = QRectF(-frad, dia, dia, -dia)
         # right side
-        pp.arcMoveTo(rect, 180 + a)
-        pp.arcTo(rect, 180 + a, 180 - 2 * a)
+        pp.arcMoveTo(rect, 270)
+        pp.arcTo(rect, 270, 90 - a)
         pp.lineTo(*p3)
-        pp.lineTo(*p4)
+        if self.hasStep:
+            pp.lineTo(*p4)
         pp.lineTo(*p5)
+        pp.lineTo(*p6)
+        self.profile = QPainterPath(pp)
         # left side
-        pp.lineTo(-p5[0], p5[1])
-        pp.lineTo(-p4[0], p4[1])
-        pp.lineTo(-p3[0], p3[1])
-        pp.lineTo(-p2[0], p2[1])
-        # diagonal line to show flute
+        pp.addPath(mirTx.map(pp))
+        # flute line
         pp.moveTo(*p1)
         pp.lineTo(*p3)
         self.setPath(pp)
@@ -1090,7 +1084,7 @@ class TaperBallMillDef(TaperEndMillDef):
                               'quadV': v1 + v2,
                               'format': FMTANG})
         # comment label
-        self._updateCommentText(labelAbove, oal, tr.height())
+        self._updateCommentLabel(labelAbove, oal, tr.height())
         
 
 class BallMillDef(EndMillDef):
@@ -1117,20 +1111,20 @@ class BallMillDef(EndMillDef):
         p5 = [srad, oal]
         p6 = [0.0, oal]
         pp = QPainterPath()
-        step = sdia != dia
+        self.hasStep = sdia != dia
         rect = QRectF(-frad, dia, dia, -dia)
-        pp.arcMoveTo(rect, 180.0)
-        pp.arcTo(rect, 180.0, 180.0)
-        if step:
+        # left side
+        pp.arcMoveTo(rect, 270.0)
+        pp.arcTo(rect, 270.0, 90.0)
+        if self.hasStep:
             pp.lineTo(*p3)
             pp.lineTo(*p4)
         pp.lineTo(*p5)
-        pp.lineTo(-p5[0], p5[1])
-        if step:
-            pp.lineTo(-p4[0], p4[1])
-            pp.lineTo(-p3[0], p3[1])
-        pp.lineTo(-p2[0], p2[1])
-        # flute
+        pp.lineTo(*p6)
+        self.profile = QPainterPath(pp)
+        # left
+        pp.addPath(mirTx.map(pp))
+        # flute line
         pp.moveTo(0.0, 0.0)
         pp.lineTo(*p3)
         self.setPath(pp)
@@ -1200,9 +1194,7 @@ class BallMillDef(EndMillDef):
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
-        self._updateCommentText(labelAbove, oal, tr.height())
-    def _update(self):
-        self._updateDims(*self._updateProfile())
+        self._updateCommentLabel(labelAbove, oal, tr.height())
         
         
 class BullMillDef(EndMillDef):
@@ -1256,6 +1248,7 @@ class BullMillDef(EndMillDef):
         p5 = [srad, flen]
         p6 = [srad, oal]
         p7 = [0, oal]
+        self.hasStep = sdia != dia
         rect = QRectF(frad - r*2, r*2, r*2, -r*2)
         pp = QPainterPath()
         # right side
@@ -1263,20 +1256,15 @@ class BullMillDef(EndMillDef):
         pp.lineTo(*p2)
         pp.arcMoveTo(rect, 270.0)
         pp.arcTo(rect, 270.0, 90.0)
-        pp.lineTo(*p4)
-        pp.lineTo(*p5)
+        if self.hasStep:
+            pp.lineTo(*p4)
+            pp.lineTo(*p5)
         pp.lineTo(*p6)
         pp.lineTo(*p7)
+        self.profile = QPainterPath(pp)
         # left side
-        pp.lineTo(-p6[0], p6[1])
-        pp.lineTo(-p5[0], p5[1])
-        pp.lineTo(-p4[0], p4[1])
-        pp.lineTo(-p3[0], p3[1])
-        rect.moveLeft(-frad)
-        pp.arcMoveTo(rect, 180.0)
-        pp.arcTo(rect, 180.0, 90.0)
-        pp.lineTo(*p1)
-        # flute
+        pp.addPath(mirTx.map(pp))
+        # flute line
         pp.moveTo(-frad + r, 0.0)
         pp.lineTo(*p4)
         self.setPath(pp)
@@ -1360,9 +1348,7 @@ class BullMillDef(EndMillDef):
                                'format':
                                    FMTRMM if metric else FMTRIN})
         # comment label
-        self._updateCommentText(labelAbove, oal, tr.height())
-    def _update(self):
-        self._updateDims(*self._updateProfile())
+        self._updateCommentLabel(labelAbove, oal, tr.height())
 
 
 # TODO:
@@ -1418,8 +1404,8 @@ class WoodruffMillDef(ToolDef):
         # flute length < oal
         if not d['fluteLength'] < d['oal']:
             return False
-        # neck dia < shank dia
-        if not d['neckDia'] < d['shankDia']:
+        # shank dia >= neck dia
+        if not d['neckDia'] <= d['shankDia']:
             return False
         # neck dia < dia
         if not d['neckDia'] < d['dia']:
@@ -1449,26 +1435,22 @@ class WoodruffMillDef(ToolDef):
         p5 = [rect.center().x() - arcX, rect.center().y() + arcY]
         p6 = [srad, oal]
         p7 = [0, oal]
+        self.hasStep = ndia != sdia
         pp = QPainterPath()
         # right side
-        pp.moveTo(p1[0], p1[1])
-        pp.lineTo(p2[0], p2[1])
-        pp.lineTo(p3[0], p3[1])
-        pp.lineTo(p4[0], p4[1])
-        pp.arcMoveTo(rect, -180.0)
-        pp.arcTo(rect, -180.0, sweepAngle)
+        pp.moveTo(*p1)
+        pp.lineTo(*p2)
+        pp.lineTo(*p3)
+        pp.lineTo(*p4)
+        if self.hasStep:
+            pp.arcMoveTo(rect, -180.0)
+            pp.arcTo(rect, -180.0, sweepAngle)
         pp.lineTo(p6[0], p6[1])
         pp.lineTo(p7[0], p7[1])
+        self.profile = QPainterPath(pp)
         # left
-        rect.moveCenter(QPointF(-rect.center().x(), rect.center().y()))
-        pp.lineTo(-p6[0], p6[1])
-        pp.lineTo(-p5[0], p5[1])
-        pp.arcMoveTo(rect, -sweepAngle)
-        pp.arcTo(rect, -sweepAngle, sweepAngle)
-        pp.lineTo(-p3[0], p3[1])
-        pp.lineTo(-p2[0], p2[1])
-        pp.lineTo(p1[0], p1[1])
-        # diagonal line to show flute
+        pp.addPath(mirTx.map(pp))
+        # flute line
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(p3[0], p3[1])
         self.setPath(pp)
@@ -1524,7 +1506,7 @@ class WoodruffMillDef(ToolDef):
             labelY = oal + tr.height() * 1.1
             if ar.height() * 2.1 < oal:
                 outside = False
-        labelX = fLabelX + fltr.width() * .6
+        labelX = max(fLabelX + fltr.width() * .6, p6[0] + tr.width() * .6)
         labelP = QPointF(labelX, labelY)
         self.oalDim.config({'value': oal,
                             'ref1': QPointF(*p2),
@@ -1534,9 +1516,7 @@ class WoodruffMillDef(ToolDef):
                             'pos': labelP,
                             'force': 'vertical'})
         # comment label
-        self._updateCommentText(labelAbove, oal, tr.height())
-    def _update(self):
-        self._updateDims(*self._updateProfile())
+        self._updateCommentLabel(labelAbove, oal, tr.height())
         
 
 # TODO: The bodyLength parameters are guesses in tools.json
@@ -1551,8 +1531,6 @@ class RadiusMillDef(ToolDef):
       radius
       oal
       metric
-
-      Note: CornerRoundingMillDef is just too long :/
     """
     def __init__(self, specs):
         super(RadiusMillDef, self).__init__(specs)
@@ -1629,6 +1607,7 @@ class RadiusMillDef(ToolDef):
         p7 = [srad, blen]
         p8 = [srad, oal]
         p9 = [0, oal]
+        self.hasStep = bdia != sdia
         pp = QPainterPath()
         rect = QRectF(QPointF(trad, r + flat),
                       QPointF(trad + r * 2.0, flat - r))
@@ -1639,21 +1618,25 @@ class RadiusMillDef(ToolDef):
         pp.arcMoveTo(rect, -180.0)
         pp.arcTo(rect, -180.0, -90.0)
         pp.lineTo(*p5)
-        pp.lineTo(*p6)
-        pp.lineTo(*p7)
+        if self.hasStep:
+            pp.lineTo(*p6)
+            pp.lineTo(*p7)
         pp.lineTo(*p8)
         pp.lineTo(*p9)
-        # left
-        rect.moveTopRight(QPointF(-trad, flat + r))
-        pp.lineTo(-p8[0], p8[1])
-        pp.lineTo(-p7[0], p7[1])
-        pp.lineTo(-p6[0], p6[1])
-        pp.lineTo(-p5[0], p5[1])
-        pp.lineTo(-p4[0], p4[1])
-        pp.arcMoveTo(rect, 90)
-        pp.arcTo(rect, 90, -90)
-        pp.lineTo(-p2[0], p2[1])
-        pp.lineTo(*p1)
+        self.profile = QPainterPath(pp)
+        # left side
+        pp.addPath(mirTx.map(pp))
+
+        # m = {QPainterPath.MoveToElement:      ' move to:',
+        #      QPainterPath.LineToElement:      ' line to:',
+        #      QPainterPath.CurveToElement:     'curve to:',
+        #      QPainterPath.CurveToDataElement: '    data:'}
+        # print
+        # print 'NEW PATH'
+        # for n in range(pp.elementCount()):
+        #     e = pp.elementAt(n)
+        #     print n, m[e.type], e.x, e.y
+        
         self.setPath(pp)
         return p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal, bdia, blen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal,
@@ -1667,12 +1650,12 @@ class RadiusMillDef(ToolDef):
                            .75, metric)
         # body diameter dimension
         self._updateDiaDim(self.bodyDiaDim, [-p6[0], p6[1]], p6, bdia, None,
-                           .75, metric)
+                           -.75, metric)
         # body len dimension
         bltr = self.bodyLengthDim.dimText.sceneBoundingRect()
         ar = self.bodyLengthDim.arrow1.sceneBoundingRect()
         outside = True
-        bLabelX = p6[0] + bltr.width() * .6
+        bLabelX = max(p6[0], p7[0]) + bltr.width() * .6
         # label inside witness lines
         if bltr.height() * 1.1 < p6[1]:
             fLabelP = QPointF(bLabelX, p6[1] * 0.5)
@@ -1685,7 +1668,7 @@ class RadiusMillDef(ToolDef):
                 outside = False
         self.bodyLengthDim.config({'value': blen,
                                    'ref1': QPointF(*p2),
-                                   'ref2': QPointF(*p6),
+                                   'ref2': QPointF(*max(p6, p7)),
                                    'outside': outside,
                                    'format': FMTMM if metric else FMTIN,
                                    'pos': fLabelP,
@@ -1731,7 +1714,162 @@ class RadiusMillDef(ToolDef):
                                'format':
                                    FMTRMM if metric else FMTRIN})
         # comment label
-        self._updateCommentText(labelAbove, oal, tr.height())
-    def _update(self):
-        self._updateDims(*self._updateProfile())
+        self._updateCommentLabel(labelAbove, oal, tr.height())
         
+
+class DovetailMillDef(EndMillDef):
+    """Define a basic dovetail end mill shape.
+    specs:
+      shankDia
+      dia
+      fluteLength
+      oal
+      angle
+      metric       True/False
+    """
+    def __init__(self, specs):
+        super(DovetailMillDef, self).__init__(specs)
+        self.angleDim = AngleDim()
+        self.angleDim.setToolTip("angle")
+    def sceneChange(self, scene):
+        super(DovetailMillDef, self).sceneChange(scene)
+        if scene:
+            scene.addItem(self.angleDim)
+        else:
+            self.scene().removeItem(self.angleDim)
+    def checkSpecs(self):
+        super(DovetailMillDef, self).checkSpecs()
+        self._checkSpec('angle', [gt, 0.0])
+    def checkGeometry(self, specs={}):
+        d = copy(self.specs)
+        d.update(specs)
+        # flute length < oal
+        # TODO: incorporate the neck
+        if d['fluteLength'] >= d['oal']:
+            return False
+        # TODO: angle vs dia vs flute length
+        return True
+    def _updateProfile(self):
+        """Create the tool's silhouette for display.
+
+        Return a tuple of parameters used by _updateDims().
+        """
+        sdia = self.specs['shankDia']
+        srad = sdia * 0.5
+        dia = self.specs['dia']
+        frad = dia * 0.5
+        flen = self.specs['fluteLength']
+        oal = self.specs['oal']
+        a = self.specs['angle']
+        p3X = frad - flen / tan(radians(a))
+        p1 = [0.0, 0.0]
+        p2 = [frad, 0.0]
+        p3 = [p3X, flen]
+        p4 = [min(srad, p3X) * .9, flen]
+        p5 = [min(srad, p3X) * .9, flen * 1.5]
+        p6 = [srad, flen * 1.5]
+        p7 = [srad, oal]
+        p8 = [0, oal]
+        pp = QPainterPath()
+        # right side
+        pp.moveTo(*p1)
+        pp.lineTo(*p2)
+        pp.lineTo(*p3)
+        pp.lineTo(*p4)
+        pp.lineTo(*p5)
+        pp.lineTo(*p6)
+        pp.lineTo(*p7)
+        # left side
+        pp.lineTo(-p7[0], p7[1])
+        pp.lineTo(-p6[0], p6[1])
+        pp.lineTo(-p5[0], p5[1])
+        pp.lineTo(-p4[0], p4[1])
+        pp.lineTo(-p3[0], p3[1])
+        pp.lineTo(-p2[0], p2[1])
+        pp.lineTo(*p1)
+        # diagonal line to show flute
+        pp.moveTo(-p2[0], p2[1])
+        pp.lineTo(*p3)
+        self.setPath(pp)
+        return p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal, flen, a
+    def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal,
+                    flen, a):
+        """Attempt to intelligently position the dimensions and name label.
+        """
+        metric = self.specs['metric']
+        # flute diameter dimension
+        self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, None, -.75,
+                           metric)
+        # shank diameter dimension
+        self._updateDiaDim(self.shankDiaDim, [-p7[0], p7[1]], p7, sdia, None,
+                           .75, metric)
+        # flute len dimension
+        fltr = self.fluteLenDim.dimText.sceneBoundingRect()
+        ar = self.fluteLenDim.arrow1.sceneBoundingRect()
+        outside = True
+        # label inside witness lines
+        if fltr.height() * 1.1 < flen:
+            labelY = flen * 0.5
+            if fltr.height() * 1.1 + ar.height() * 2.1 < flen:
+                outside = False
+        # label below witness lines
+        else:
+            labelY = fltr.height() * -2.0
+            if ar.height() * 2.1 < flen:
+                outside = False
+        fLabelP = QPointF(p2[0] + fltr.width() * .6, labelY)
+        self.fluteLenDim.config({'value': flen,
+                                 'ref1': QPointF(*p2),
+                                 'ref2': QPointF(*p3),
+                                 'outside': outside,
+                                 'format': FMTMM if metric else FMTIN,
+                                 'pos': fLabelP,
+                                 'force': 'vertical'})
+        # OAL dimension
+        tr = self.oalDim.dimText.sceneBoundingRect()
+        ar = self.oalDim.arrow1.sceneBoundingRect()
+        outside = True
+        # label inside witness lines
+        labelAbove = False
+        slen = oal - flen
+        if tr.height() * 1.1 < slen:
+            labelY = oal - slen * 0.5
+            if tr.height() * 1.1 + ar.height() * 2.1 < oal:
+                outside = False
+        # label above witness lines
+        else:
+            labelAbove = True
+            labelY = oal + tr.height() * 1.1
+            if ar.height() * 2.1 < oal:
+                outside = False
+        labelX = max(fLabelP.x() + fltr.width() * .6, p7[0] + tr.width() * .6)
+        labelP = QPointF(labelX, labelY)
+        self.oalDim.config({'value': oal,
+                            'ref1': QPointF(*p2),
+                            'ref2': QPointF(*p7),
+                            'outside': outside,
+                            'format': FMTMM if metric else FMTIN,
+                            'pos': labelP,
+                            'force': 'vertical'})
+        # flute angle dimension
+        tr = self.angleDim.dimText.sceneBoundingRect()
+        # left flute edge end points
+        qp1 = QPointF(-p3[0], p3[1])
+        qp2 = QPointF(-p2[0], p2[1])
+        # bottom edge end points
+        qp3 = QPointF(*p2)
+        qp4 = QPointF(-p2[0], p2[1])
+        # flute edge vector
+        v1 = QVector2D(qp2 - qp1)
+        # bottom edge vector
+        v2 = QVector2D(qp4 - qp3)
+        labelP = QPointF(qp2.x() - tr.width() * 1.5, tr.height() * 1.5)
+        self.angleDim.config({'value': self.specs['angle'],
+                              'pos': labelP,
+                              'line1': QLineF(qp1, qp2),
+                              'line2': QLineF(qp3, qp4),
+                              'outside': False,
+                              'quadV': v1 + v2,
+                              'format': FMTANG})
+        # comment label
+        self._updateCommentLabel(labelAbove, oal, tr.height())

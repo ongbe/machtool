@@ -1841,5 +1841,47 @@
   "angle": 7.0,
   "metric": false
   }
+ ],
+ "Dovetail End Mill":
+ [{"name": "3/8 X 60DEG DOVETAIL MILL",
+  "shankDia": 0.375,
+  "dia": 0.375,
+  "fluteLength": 0.1875,
+  "oal": 2.125,
+  "angle": 60.0,
+  "metric": false
+  },
+  {"name": "3/4 X 60DEG DOVETAIL MILL",
+  "shankDia": 0.375,
+  "dia": 0.75,
+  "fluteLength": 0.3125,
+  "oal": 2.125,
+  "angle": 60.0,
+  "metric": false
+  },  
+  {"name": "1-3/8 X 60DEG DOVETAIL MILL",
+  "shankDia": 0.625,
+  "dia": 1.375,
+  "fluteLength": 0.5625,
+  "oal": 2.875,
+  "angle": 60.0,
+  "metric": false
+  },
+  {"name": "1-7/8 X 60DEG DOVETAIL MILL",
+  "shankDia": 0.875,
+  "dia": 1.875,
+  "fluteLength": 0.8125,
+  "oal": 3.25,
+  "angle": 60.0,
+  "metric": false
+  },
+  {"name": "2-1/4 X 60DEG DOVETAIL MILL",
+  "shankDia": 1.0,
+  "dia": 2.25,
+  "fluteLength": 1.0625,
+  "oal": 3.75,
+  "angle": 60.0,
+  "metric": false
+  }  
  ]
 }

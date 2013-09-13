@@ -11,8 +11,8 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import Qt as qt
 
 from dimedit import DimEdit, CommentEdit
-from dimension import DimText
-from tooldef import ToolDef, CommentText
+from dimension import DimLabel
+from tooldef import ToolDef, CommentLabel
 
 
 class ToolDefView(QGraphicsView):
@@ -101,10 +101,10 @@ class ToolDefView(QGraphicsView):
         item = self.itemAt(e.pos())
         self.commentBox.hide()
         self.dimBox.hide()
-        if item and isinstance(item, (DimText, CommentText)):
-            if isinstance(item, DimText):
+        if item and isinstance(item, (DimLabel, CommentLabel)):
+            if isinstance(item, DimLabel):
                 box = self.dimBox
-            elif isinstance(item, CommentText):
+            elif isinstance(item, CommentLabel):
                 box = self.commentBox
             box.setItem(item)
             box.setText(item.text())
