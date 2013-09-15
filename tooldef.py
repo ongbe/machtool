@@ -3,6 +3,98 @@
 
 """tooldef.py
 
+Overview
+========
+Tool definitions. Each tool is represented by a QGraphicsPathItem. The item's
+internal QPainterPath can can be modified by way of editable dimensions. X0.0
+is the center of the tool. Y0 is the bottom of the tool. A right-handed
+Cartesian coordiante system is used. Y+ is up.
+
+Tool Definition
+===============
+Each tool type is defined by a dict of specifications. These dicts are stored
+as JSON. Every tool must have the following three entries:
+ * "name" -- string, tool comment as you would use in a machine tool program,
+             minus whatever delimiter a control might require.
+ * "metric" -- boolean, True if the tool is metric. The tool's dimension must
+               be given in millimeters. Else they are given in inches.
+ * "oal" -- overall length of the tool
+Other common keys are:
+ * "dia" -- mostly used for the cutting diameter of the tool
+ * "fluteLength" -- mostly used for the cutting length of the tool
+ * "radius" -- corner radius, for instance
+
+Example JSON Object for a Bull End Mill
+---------------------------------------
+ {"name": "1/2 X 1/8R BULL MILL",
+  "metric": false,
+  "oal": 3.0,
+  "shankDia": 0.5,  
+  "dia": 0.5,
+  "fluteLength": 1.0,
+  "radius": 0.125}
+
+Tool Profile
+============
+The right side of the profile is stored in ToolDef.profile as a list of
+tuples. If the tuple has two elements it defines the point (x, y). Otherwise
+it defines the arc ((endX, endY), (centerX, centerY), ['clw' | 'cclw']). Each
+profile will start and end on the centerline. Each ToolDef instance has a
+'hasStep' attribute. This will be True if the "shankDia" entry is not equal to
+another diameter of the tool, usually the "dia" entry. Because the previous
+bull mill's shank dia is the same as its dia, two extra points are not
+needed. Its hasStep will be False.
+
+Note: QPainterPath has a similar list of the elements but arcs are stored
+      as cubic approximations.
+
+Note: ToolDef.profile is always stored in inches. If the tool is metric, the
+      values are converted.
+
+Example Profile of the Previous Bull End Mill
+---------------------------------------------
+The values start at the origin at the bottom, and end at the center of the
+shank at the top.
+
+ [(0, 0),
+  (0.375, 0.0),
+  ((0.25, 0.125), (0.375, 0.125), 'cclw'),
+  (0.5, 3.0),
+  (0.0, 3.0)]
+
+Revolved Meshes
+===============
+A revolved surface of the entire tool, the cutting section, or the shank
+section may be obtained with:
+ * ToolDef.mesh()
+ * ToolDef.cutterMesh()
+ * ToolDef.shankMesh()
+These are designed to be rendered with OpenGL. They are generated each time
+their methods are called.
+
+Tool Validity
+=============
+Each tool must have the following two methods:
+ * _checkSpecs
+ * checkGeometry
+See their ToolDef doc strings for usage.
+
+Tools Currently Defined
+=======================
+ * BallMillDef
+ * BullMillDef
+ * CenterDrillDef
+ * DrillDef
+ * DovetailMillDef
+ * EndMillDef
+ * RadiusMillDef
+ * SpotDrillDef
+ * TaperBallMillDef
+ * TaperEndMillDef
+ * WoodruffMillDef
+
+Temporary Progress Notes
+========================
 P  -- profile defined
 D  -- dimensions defined
 S  -- revolved surface defined
@@ -44,8 +136,9 @@ from arc import Arc, arcFromAngles
 
 from strutil import *
 
-
+# mirror about the centerline for left side of paths
 mirTx = QTransform().scale(-1.0, 1.0)
+
 
 class CommentLabel(TextLabel):
     """A graphical representation of a tools comment string.
@@ -64,9 +157,7 @@ class ToolDef(QGraphicsPathItem):
     centerlinePen = QPen(QBrush(QColor(128, 128, 128)), 0, qt.DashDotLine)
     def __init__(self, specs):
         super(ToolDef, self).__init__()
-        self.specs = copy(specs)
-        self.checkSpecs()       # call subclasses method
-        self.dirty = False
+        self._checkSpecs(specs)       # call subclasses method
         self.ppath = QPainterPath()
         pen = QPen(QColor(0, 0, 255))
         pen.setWidth(2)         # 2 pixels wide
@@ -75,13 +166,16 @@ class ToolDef(QGraphicsPathItem):
         self.commentText = CommentLabel()
         self.commentText.font.setBold(True)
         self.commentText.setToolTip("name")
-        # The right side of the profile as a QPainterPath. The path will
-        # transverse from the bottom of the tool to the top. This is used to
-        # create a revolved mesh.
+        # The right side of the profile as described in this module's document
+        # string.
         self.profile = None
         # True if there is an extra step in the profile for cases where the
         # shankDiam != another diameter of the tool. Usually the cutter dia.
         self.hasStep = False
+        self.specs = copy(specs)
+        self.prepareGeometryChange()
+        self._updateProfile()
+        self.dirty = False
     def paint(self, painter, option, widget):
         """Draw a centerline.
         """
@@ -97,26 +191,25 @@ class ToolDef(QGraphicsPathItem):
         return self.commentText.text()
     @staticmethod
     def getSortKey():
-        """Return the key used to sort this tool class
+        """Return the key used to sort this tool class.
 
-        Return a string. This base class returns 'dia'.
+        Return a string. The base class returns 'dia'.
         """
         return 'dia'
     def setDirty(self, bDirty=True):
         self.dirty = bDirty
-    def _checkSpec(self, specName, t1=None, t2=None, t3=None, enums=None,
-                   noneOk=False):
+    def _checkSpec(self, specs, specName, t1=None, t2=None, t3=None,
+                   enums=None, noneOk=False):
         """Check a single tool spec.
 
+        specs -- specs dict
         specName -- string key name
-        t1, t2, t3 -- [cmpfn, value] or None
+        t1, t2, t3 -- [cmpfn, value] or None. All given must return True.
         enums -- list of values, the spec's value must occur in the list
         noneOk -- bool, the spec can be None (but not missing)
 
-        cmpfn must be one found in the operator module:
-          lt, le, eq, ne, ge, gt
-        The spec's value will be placed on the LHS. tN's value will be palced
-        on the RHS. All given must return True.
+        cmpfn must be a binary predicate. The spec's value will be placed on
+        the LHS. tN's value will be palced on the RHS.
 
         Raise ToolDefException if the spec is invalid, else return None.
 
@@ -128,10 +221,10 @@ class ToolDef(QGraphicsPathItem):
             raise ToolDefException('{} spec test failed: {}({}, {})' \
                                        .format(repr(specName), fn, x,
                                                val))
-        if not self.specs.has_key(specName):
+        if not specs.has_key(specName):
             raise ToolDefException('{} is missing from the tool definition'\
                                        .format(repr(specName)))
-        x = self.specs[specName]
+        x = specs[specName]
         if x is None:
             if noneOk:
                 return
@@ -151,19 +244,21 @@ class ToolDef(QGraphicsPathItem):
             if not fn(x, val):
                 raiseCmpFail(fn, x, val)
         if enums:
-            if x not in enums:
-                raise ToolDefException('{} must be one of {}' \
-                                           .format(repr(specName), enums))
-    def checkSpecs(self):
+            if e not in enums:
+                raise ToolDefException('{} must be one of {}, not {}' \
+                                           .format(repr(specName), enums,
+                                                   x))
+    def _checkSpecs(self, specs):
         """Check if all key/val pairs are present and valid.
 
         Raise ToolDefException if not. This should be called only from
-        __init__(). This base class only checks if the 'name' and 'metric'
-        specs. Each subclass should call this base class method and validate
-        its remaining specs.
+        __init__(). This base class only checks if the 'name', 'metric', and
+        'oal' specs are present and have acceptable values.. Each subclass
+        should call this base class method and validate its remaining specs.
         """
-        self._checkSpec('name')
-        self._checkSpec('metric', enums=[True, False])
+        self._checkSpec(specs, 'name', [isinstance, (str, unicode)])
+        self._checkSpec(specs, 'metric', [isinstance, bool])
+        self._checkSpec(specs, 'oal', [isinstance, (float, int)], [gt, 0.0])
     def checkGeometry(self, specs={}):
         """Find if the specs define valid geometry.
 
@@ -184,16 +279,21 @@ class ToolDef(QGraphicsPathItem):
         """
         return dia * 0.5 / tan(radians(includedAngle * 0.5))
     def config(self, specs={}):
+        """Update the tool's specifications.
+
+        specs -- dict
+        """
+        self.prepareGeometryChange()
+        # Check if anything changed.
         for k, v in specs.iteritems():
             if self.specs[k] != v:
-                self.setDirty(True)
+                self.dirty = True
+                self.specs.update(copy(specs))
                 break
-        self.specs.update(copy(specs))
-        self.prepareGeometryChange()
-        self._update()
+        self._updateDims(*self._updateProfile())
     # TODO: The default sceneBoundingRect() will not work because the pen is
     #       cosmetic with a width of 2. Probably still not correct, but it
-    #       works ok for now. 
+    #       works ok for now.
     def sceneBoundingRect(self):
         return self.path().boundingRect()
     def isMetric(self):
@@ -260,9 +360,12 @@ class ToolDef(QGraphicsPathItem):
             labelYfactor = 3.0
         labelP = QPointF(0, y + boxHeight * labelYfactor)
         self.commentText.config({'pos': labelP, 'text': self.specs['name']})
-    def _update(self):
-        self._updateDims(*self._updateProfile())
-    
+    def mesh(self):
+        raise NotImplementedError()
+    def cutterMesh(self):
+        raise NotImplementedError()
+    def shankMesh(self):
+        raise NotImplementedError()
 
 class DrillDef(ToolDef):
     """Define a basic drill shape.
@@ -301,13 +404,12 @@ class DrillDef(ToolDef):
             self.scene().removeItem(self.fluteLenDim)
             self.scene().removeItem(self.oalDim)
             self.scene().removeItem(self.angleDim)
-    def checkSpecs(self):
-        super(DrillDef, self).checkSpecs()
-        self._checkSpec('shankDia', [gt, 0.0])
-        self._checkSpec('dia', [gt, 0.0])
-        self._checkSpec('fluteLength', [gt, 0.0])
-        self._checkSpec('oal', [gt, 0.0])
-        self._checkSpec('angle', [gt, 30.0], [le, 180.0])
+    def _checkSpecs(self, specs):
+        super(DrillDef, self)._checkSpecs(specs)
+        self._checkSpec(specs, 'shankDia', [gt, 0.0])
+        self._checkSpec(specs, 'dia', [gt, 0.0])
+        self._checkSpec(specs, 'fluteLength', [gt, 0.0])
+        self._checkSpec(specs, 'angle', [gt, 30.0], [le, 180.0])
     def checkGeometry(self, specs={}):
         d = copy(self.specs)
         d.update(specs)
@@ -327,12 +429,12 @@ class DrillDef(ToolDef):
         srad = sdia / 2.0
         frad = dia / 2.0
         tiplen = self._tipLength(angle, dia)
-        p1 = [0, 0]
-        p2 = [frad, tiplen]
-        p3 = [frad, tiplen + flen]
-        p4 = [srad, tiplen + flen]
-        p5 = [srad, tiplen + oal]
-        p6 = [0, tiplen + oal]
+        p1 = (0, 0)
+        p2 = (frad, tiplen)
+        p3 = (frad, tiplen + flen)
+        p4 = (srad, tiplen + flen)
+        p5 = (srad, tiplen + oal)
+        p6 = (0, tiplen + oal)
         self.hasStep = dia != sdia
         pp = QPainterPath()
         # right side
@@ -343,13 +445,16 @@ class DrillDef(ToolDef):
             pp.lineTo(*p4)
         pp.lineTo(*p5)
         pp.lineTo(*p6)
-        self.profile = QPainterPath(pp) # store just the right side profile
         # left
         pp.addPath(mirTx.map(pp))
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(p3[0], p3[1])
         self.setPath(pp)
+        if self.hasStep:
+            self.profile = [p1, p2, p3, p4, p5, p6]
+        else:
+            self.profile = [p1, p2, p5, p6]
         return [p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen, sdia, flen]
     def _updateDims(self, p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen,
                     sdia, flen):
@@ -469,11 +574,10 @@ class SpotDrillDef(ToolDef):
             self.scene().removeItem(self.angleDim)
             self.scene().removeItem(self.diaDim)
             self.scene().removeItem(self.oalDim)
-    def checkSpecs(self):
-        super(SpotDrillDef, self).checkSpecs()
-        self._checkSpec('dia', [gt, 0.0])
-        self._checkSpec('oal', [gt, 0.0])
-        self._checkSpec('angle', [gt, 0.0], [le, 180.0])
+    def _checkSpecs(self, specs):
+        super(SpotDrillDef, self)._checkSpecs(specs)
+        self._checkSpec(specs, 'dia', [gt, 0.0])
+        self._checkSpec(specs, 'angle', [gt, 0.0], [le, 180.0])
     def checkGeometry(self, specs={}):
         d = copy(self.specs)
         d.update(specs)
@@ -488,20 +592,20 @@ class SpotDrillDef(ToolDef):
         dia = self.specs['dia']
         r = dia * 0.5
         oal = self.specs['oal']
-        p1 = [0, 0]
-        p2 = [r, self._tipLength(self.specs['angle'], dia)]
-        p3 = [r, oal]
-        p4 = [0, oal]
+        p1 = (0, 0)
+        p2 = (r, self._tipLength(self.specs['angle'], dia))
+        p3 = (r, oal)
+        p4 = (0, oal)
         pp = QPainterPath()
         # right side
         pp.moveTo(*p1)
         pp.lineTo(*p2)
         pp.lineTo(*p3)
         pp.lineTo(*p4)
-        self.profile = QPainterPath(pp)
         # left
         pp.addPath(mirTx.map(pp))
         self.setPath(pp)
+        self.profile = [p1, p2, p3, p4]
         return p1, p2, p3, p4, dia, oal
     def _updateDims(self, p1, p2, p3, p4, dia, oal):
         metric = self.specs['metric']
@@ -578,12 +682,12 @@ class CenterDrillDef(ToolDef):
         halfBellAngle = 30.0
         pointLength = tan(radians(90.0 - halfPointAngle)) * tipRadius
         bellLength = tan(radians(90.0 - 30)) * (bodyRadius - tipRadius)
-        p1 = [0, 0]
-        p2 = [tipRadius, pointLength]
-        p3 = [tipRadius, pointLength + tipLength]
-        p4 = [bodyRadius, pointLength + tipLength + bellLength]
-        p5 = [bodyRadius, oal]
-        p6 = [0, oal]
+        p1 = (0, 0)
+        p2 = (tipRadius, pointLength)
+        p3 = (tipRadius, pointLength + tipLength)
+        p4 = (bodyRadius, pointLength + tipLength + bellLength)
+        p5 = (bodyRadius, oal)
+        p6 = (0, oal)
         pp = QPainterPath()
         # # right side
         pp.moveTo(*p1)
@@ -592,7 +696,7 @@ class CenterDrillDef(ToolDef):
         pp.lineTo(*p4)
         pp.lineTo(*p5)
         pp.lineTo(*p6)
-        self.profile = QPainterPath(pp)
+        self.profile = [p1, p2, p3, p4, p5, p6]
         # # left
         pp.addPath(mirTx.map(pp))
         self.setPath(pp)
@@ -636,12 +740,11 @@ class EndMillDef(ToolDef):
             self.scene().removeItem(self.shankDiaDim)
             self.scene().removeItem(self.fluteLenDim)
             self.scene().removeItem(self.oalDim)
-    def checkSpecs(self):
-        super(EndMillDef, self).checkSpecs()
-        self._checkSpec('shankDia', [gt, 0.0])
-        self._checkSpec('dia', [gt, 0.0])
-        self._checkSpec('fluteLength', [gt, 0.0])
-        self._checkSpec('oal', [gt, 0.0])
+    def _checkSpecs(self, specs):
+        super(EndMillDef, self)._checkSpecs(specs)
+        self._checkSpec(specs, 'shankDia', [gt, 0.0])
+        self._checkSpec(specs, 'dia', [gt, 0.0])
+        self._checkSpec(specs, 'fluteLength', [gt, 0.0])
     def checkGeometry(self, specs={}):
         d = copy(self.specs)
         d.update(specs)
@@ -660,12 +763,12 @@ class EndMillDef(ToolDef):
         frad = dia * 0.5
         flen = self.specs['fluteLength']
         oal = self.specs['oal']
-        p1 = [0.0, 0.0]
-        p2 = [frad, 0.0]
-        p3 = [frad, flen]
-        p4 = [srad, flen]
-        p5 = [srad, oal]
-        p6 = [0.0, oal]
+        p1 = (0.0, 0.0)
+        p2 = (frad, 0.0)
+        p3 = (frad, flen)
+        p4 = (srad, flen)
+        p5 = (srad, oal)
+        p6 = (0.0, oal)
         self.hasStep = sdia != dia
         pp = QPainterPath()
         # right side
@@ -676,13 +779,16 @@ class EndMillDef(ToolDef):
             pp.lineTo(*p4)
         pp.lineTo(*p5)
         pp.lineTo(*p6)
-        self.profile = QPainterPath(pp)
         # left side
         pp.addPath(mirTx.map(pp))
         # # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
         self.setPath(pp)
+        if self.hasStep:
+            self.profile = [p1, p2, p3, p4, p5, p6]
+        else:
+            self.profile = [p1, p2, p5, p6]
         return p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen):
         """Attempt to intelligently position the dimensions and name label.
@@ -790,13 +896,12 @@ class TaperEndMillDef(ToolDef):
             self.scene().removeItem(self.fluteLenDim)
             self.scene().removeItem(self.oalDim)
             self.scene().removeItem(self.angleDim)
-    def checkSpecs(self):
-        super(TaperEndMillDef, self).checkSpecs()
-        self._checkSpec('shankDia', [gt, 0.0])
-        self._checkSpec('dia', [gt, 0.0])
-        self._checkSpec('fluteLength', [gt, 0.0])
-        self._checkSpec('oal', [gt, 0.0])
-        self._checkSpec('angle', [ge, 0.0])
+    def _checkSpecs(self, specs):
+        super(TaperEndMillDef, self)._checkSpecs(specs)
+        self._checkSpec(specs, 'shankDia', [gt, 0.0])
+        self._checkSpec(specs, 'dia', [gt, 0.0])
+        self._checkSpec(specs, 'fluteLength', [gt, 0.0])
+        self._checkSpec(specs, 'angle', [ge, 0.0])
     def checkGeometry(self, specs={}):
         d = copy(self.specs)
         d.update(specs)
@@ -820,12 +925,12 @@ class TaperEndMillDef(ToolDef):
         flen = self.specs['fluteLength']
         oal = self.specs['oal']
         a = self.specs['angle']
-        p1 = [0.0, 0.0]
-        p2 = [frad, 0.0]
-        p3 = [frad + tan(radians(a)) * flen, flen]
-        p4 = [srad, flen]
-        p5 = [srad, oal]
-        p6 = [0.0, oal]
+        p1 = (0.0, 0.0)
+        p2 = (frad, 0.0)
+        p3 = (frad + tan(radians(a)) * flen, flen)
+        p4 = (srad, flen)
+        p5 = (srad, oal)
+        p6 = (0.0, oal)
         # this will probably never happen without an epsilon test
         self.hasStep = p3[0] != srad
         pp = QPainterPath()
@@ -844,6 +949,10 @@ class TaperEndMillDef(ToolDef):
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
         self.setPath(pp)
+        if self.hasStep:
+            self.profile = [p1, p2, p3, p4, p5, p6]
+        else:
+            self.profile = [p1, p2, p5, p6]
         return p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen, a
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen,
                     a):
@@ -965,12 +1074,12 @@ class TaperBallMillDef(TaperEndMillDef):
         p2Y = frad + sin(-ra) * frad
         p3Y = flen
         p3X = p2X + tan(ra) * (flen - p2Y)
-        p1 = [0.0, 0.0]
-        p2 = [p2X, p2Y]
-        p3 = [p3X, p3Y]
-        p4 = [srad, flen]
-        p5 = [srad, oal]
-        p6 = [0.0, oal]
+        p1 = (0.0, 0.0)
+        p2 = (p2X, p2Y)
+        p3 = (p3X, p3Y)
+        p4 = (srad, flen)
+        p5 = (srad, oal)
+        p6 = (0.0, oal)
         self.hasStep = p3X != srad
         pp = QPainterPath()
         rect = QRectF(-frad, dia, dia, -dia)
@@ -982,13 +1091,16 @@ class TaperBallMillDef(TaperEndMillDef):
             pp.lineTo(*p4)
         pp.lineTo(*p5)
         pp.lineTo(*p6)
-        self.profile = QPainterPath(pp)
         # left side
         pp.addPath(mirTx.map(pp))
         # flute line
         pp.moveTo(*p1)
         pp.lineTo(*p3)
         self.setPath(pp)
+        if self.hasStep:
+            self.profile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4, p5, p6]
+        else:
+            self.profile = [p1, (p2, (0.0, srad), 'cclw'), p3, p5, p6]
         return p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal, flen, a
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal,
                     flen, a):
@@ -1104,12 +1216,12 @@ class BallMillDef(EndMillDef):
         frad = dia * 0.5
         flen = self.specs['fluteLength']
         oal = self.specs['oal']
-        p1 = [0.0, 0.0]
-        p2 = [frad, frad]
-        p3 = [frad, flen]
-        p4 = [srad, flen]
-        p5 = [srad, oal]
-        p6 = [0.0, oal]
+        p1 = (0.0, 0.0)
+        p2 = (frad, frad)
+        p3 = (frad, flen)
+        p4 = (srad, flen)
+        p5 = (srad, oal)
+        p6 = (0.0, oal)
         pp = QPainterPath()
         self.hasStep = sdia != dia
         rect = QRectF(-frad, dia, dia, -dia)
@@ -1121,13 +1233,16 @@ class BallMillDef(EndMillDef):
             pp.lineTo(*p4)
         pp.lineTo(*p5)
         pp.lineTo(*p6)
-        self.profile = QPainterPath(pp)
         # left
         pp.addPath(mirTx.map(pp))
         # flute line
         pp.moveTo(0.0, 0.0)
         pp.lineTo(*p3)
         self.setPath(pp)
+        if self.hasStep:
+            self.profile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4, p5, p6]
+        else:
+            self.profile = [p1, (p2, (0.0, frad), 'cclw'), p5, p6]
         return p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen):
         """Attempt to intelligently position the dimensions and name label.
@@ -1218,9 +1333,9 @@ class BullMillDef(EndMillDef):
             scene.addItem(self.radiusDim)
         else:
             self.scene().removeItem(self.radiusDim)
-    def checkSpecs(self):
-        super(BullMillDef, self).checkSpecs()
-        self._checkSpec('radius', [gt, 0.0])
+    def _checkSpecs(self, specs):
+        super(BullMillDef, self)._checkSpecs(specs)
+        self._checkSpec(specs, 'radius', [gt, 0.0])
     def checkGeometry(self, specs={}):
         if not super(BullMillDef, self).checkGeometry(specs):
             return False
@@ -1261,13 +1376,17 @@ class BullMillDef(EndMillDef):
             pp.lineTo(*p5)
         pp.lineTo(*p6)
         pp.lineTo(*p7)
-        self.profile = QPainterPath(pp)
         # left side
         pp.addPath(mirTx.map(pp))
         # flute line
         pp.moveTo(-frad + r, 0.0)
         pp.lineTo(*p4)
         self.setPath(pp)
+        if self.hasStep:
+            self.profile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'), p4, p5, p6,
+                            p7]
+        else:
+            self.profile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'), p6, p7]
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen, r
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen,
                     r):
@@ -1390,15 +1509,15 @@ class WoodruffMillDef(ToolDef):
             self.scene().removeItem(self.diaDim)
             self.scene().removeItem(self.fluteLenDim)
             self.scene().removeItem(self.oalDim)
-    def checkSpecs(self):
-        super(WoodruffMillDef, self).checkSpecs()
-        self._checkSpec('shankDia', [gt, 0.0])
-        self._checkSpec('neckDia', [gt, 0.0])
-        self._checkSpec('dia', [gt, 0.0])
-        self._checkSpec('fluteLength', [gt, 0.0])
-        self._checkSpec('oal', [gt, 0.0])
-    # TODO: need to include the relief radius when checking oal > flute len
+    def _checkSpecs(self, specs):
+        super(WoodruffMillDef, self)._checkSpecs(specs)
+        self._checkSpec(specs, 'shankDia', [gt, 0.0])
+        self._checkSpec(specs, 'neckDia', [gt, 0.0])
+        self._checkSpec(specs, 'dia', [gt, 0.0])
+        self._checkSpec(specs, 'fluteLength', [gt, 0.0])
     def checkGeometry(self, specs={}):
+        # TODO: need to include the relief radius when checking
+        #       oal > flute len
         d = copy(self.specs)
         d.update(specs)
         # flute length < oal
@@ -1428,13 +1547,13 @@ class WoodruffMillDef(ToolDef):
         arcX = (reliefRadius - (srad - nrad))
         arcY = sqrt(reliefRadius * reliefRadius - arcX * arcX)
         sweepAngle = degrees(atan2(arcY, arcX))
-        p1 = [0, 0]
-        p2 = [frad, 0]
-        p3 = [frad, flen]
-        p4 = [nrad, flen]
-        p5 = [rect.center().x() - arcX, rect.center().y() + arcY]
-        p6 = [srad, oal]
-        p7 = [0, oal]
+        p1 = (0, 0)
+        p2 = (frad, 0)
+        p3 = (frad, flen)
+        p4 = (nrad, flen)
+        p5 = (rect.center().x() - arcX, rect.center().y() + arcY)
+        p6 = (srad, oal)
+        p7 = (0, oal)
         self.hasStep = ndia != sdia
         pp = QPainterPath()
         # right side
@@ -1447,13 +1566,18 @@ class WoodruffMillDef(ToolDef):
             pp.arcTo(rect, -180.0, sweepAngle)
         pp.lineTo(p6[0], p6[1])
         pp.lineTo(p7[0], p7[1])
-        self.profile = QPainterPath(pp)
         # left
         pp.addPath(mirTx.map(pp))
         # flute line
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(p3[0], p3[1])
         self.setPath(pp)
+        if self.hasStep:
+            self.profile = [p1, p2, p3, p4, (p5, (arcOrigin.x(),
+                                                  arcOrigin.y()),
+                                             'clw'), p6, p7]
+        else:
+            self.profile = [p1, p2, p3, p4, p6, p7]
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia,
                     flen):
@@ -1565,14 +1689,13 @@ class RadiusMillDef(ToolDef):
             self.scene().removeItem(self.bodyLengthDim)
             self.scene().removeItem(self.radiusDim)
             self.scene().removeItem(self.oalDim)
-    def checkSpecs(self):
-        super(RadiusMillDef, self).checkSpecs()
-        self._checkSpec('shankDia', [gt, 0.0])
-        self._checkSpec('bodyDia', [gt, 0.0])
-        self._checkSpec('tipDia', [gt, 0.0])
-        self._checkSpec('bodyLength', [gt, 0.0])
-        self._checkSpec('radius', [gt, 0.0])
-        self._checkSpec('oal', [gt, 0.0])
+    def _checkSpecs(self, specs):
+        super(RadiusMillDef, self)._checkSpecs(specs)
+        self._checkSpec(specs, 'shankDia', [gt, 0.0])
+        self._checkSpec(specs, 'bodyDia', [gt, 0.0])
+        self._checkSpec(specs, 'tipDia', [gt, 0.0])
+        self._checkSpec(specs, 'bodyLength', [gt, 0.0])
+        self._checkSpec(specs, 'radius', [gt, 0.0])
     def checkGeometry(self, specs={}):
         d = copy(self.specs)
         d.update(specs)
@@ -1598,17 +1721,17 @@ class RadiusMillDef(ToolDef):
         r = self.specs['radius']
         oal = self.specs['oal']
         flat = brad - trad - r
-        p1 = [0, 0]
-        p2 = [trad, 0.0]
-        p3 = [trad, flat]
-        p4 = [brad - flat, r + flat]
-        p5 = [brad, r + flat]
-        p6 = [brad, blen]
-        p7 = [srad, blen]
-        p8 = [srad, oal]
-        p9 = [0, oal]
-        self.hasStep = bdia != sdia
+        p1 = (0, 0)
+        p2 = (trad, 0.0)
+        p3 = (trad, flat)
+        p4 = (brad - flat, r + flat)
+        p5 = (brad, r + flat)
+        p6 = (brad, blen)
+        p7 = (srad, blen)
+        p8 = (srad, oal)
+        p9 = (0.0, oal)
         pp = QPainterPath()
+        self.hasStep = bdia != sdia
         rect = QRectF(QPointF(trad, r + flat),
                       QPointF(trad + r * 2.0, flat - r))
         # right side
@@ -1623,21 +1746,16 @@ class RadiusMillDef(ToolDef):
             pp.lineTo(*p7)
         pp.lineTo(*p8)
         pp.lineTo(*p9)
-        self.profile = QPainterPath(pp)
         # left side
         pp.addPath(mirTx.map(pp))
-
-        # m = {QPainterPath.MoveToElement:      ' move to:',
-        #      QPainterPath.LineToElement:      ' line to:',
-        #      QPainterPath.CurveToElement:     'curve to:',
-        #      QPainterPath.CurveToDataElement: '    data:'}
-        # print
-        # print 'NEW PATH'
-        # for n in range(pp.elementCount()):
-        #     e = pp.elementAt(n)
-        #     print n, m[e.type], e.x, e.y
-        
         self.setPath(pp)
+        rc = rect.center()
+        if self.hasStep:
+            self.profile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'), p5, p6,
+                            p7, p8, p9]
+        else:
+            self.profile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'), p5, p8,
+                            p9]
         return p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal, bdia, blen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal,
                     bdia, blen):
@@ -1737,9 +1855,9 @@ class DovetailMillDef(EndMillDef):
             scene.addItem(self.angleDim)
         else:
             self.scene().removeItem(self.angleDim)
-    def checkSpecs(self):
-        super(DovetailMillDef, self).checkSpecs()
-        self._checkSpec('angle', [gt, 0.0])
+    def _checkSpecs(self, specs):
+        super(DovetailMillDef, self)._checkSpecs(specs)
+        self._checkSpec(specs, 'angle', [gt, 0.0])
     def checkGeometry(self, specs={}):
         d = copy(self.specs)
         d.update(specs)
@@ -1762,14 +1880,14 @@ class DovetailMillDef(EndMillDef):
         oal = self.specs['oal']
         a = self.specs['angle']
         p3X = frad - flen / tan(radians(a))
-        p1 = [0.0, 0.0]
-        p2 = [frad, 0.0]
-        p3 = [p3X, flen]
-        p4 = [min(srad, p3X) * .9, flen]
-        p5 = [min(srad, p3X) * .9, flen * 1.5]
-        p6 = [srad, flen * 1.5]
-        p7 = [srad, oal]
-        p8 = [0, oal]
+        p1 = (0.0, 0.0)
+        p2 = (frad, 0.0)
+        p3 = (p3X, flen)
+        p4 = (min(srad, p3X) * .9, flen)
+        p5 = (min(srad, p3X) * .9, flen * 1.5)
+        p6 = (srad, flen * 1.5)
+        p7 = (srad, oal)
+        p8 = (0, oal)
         pp = QPainterPath()
         # right side
         pp.moveTo(*p1)
@@ -1779,18 +1897,14 @@ class DovetailMillDef(EndMillDef):
         pp.lineTo(*p5)
         pp.lineTo(*p6)
         pp.lineTo(*p7)
+        pp.lineTo(*p8)
         # left side
-        pp.lineTo(-p7[0], p7[1])
-        pp.lineTo(-p6[0], p6[1])
-        pp.lineTo(-p5[0], p5[1])
-        pp.lineTo(-p4[0], p4[1])
-        pp.lineTo(-p3[0], p3[1])
-        pp.lineTo(-p2[0], p2[1])
-        pp.lineTo(*p1)
+        pp.addPath(mirTx.map(pp))
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
         self.setPath(pp)
+        self.profile = [p1, p2, p3, p4, p5, p6, p7, p8]
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal, flen, a
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal,
                     flen, a):

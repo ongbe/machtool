@@ -345,3 +345,5 @@ class ToolDefWidget(QWidget):
     def saveToolLib(self):
         self.toolBrowser.writeToolLib()
         self.saveToolButton.setEnabled(False)
+    def minimumSizeHint(self):
+        return QSize(300, 300)

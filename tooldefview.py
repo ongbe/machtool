@@ -112,6 +112,11 @@ class ToolDefView(QGraphicsView):
             box.show()
             self.posEditBox(box)
             box.setFocus()
+        # DEBUG: print the tools profile info
+        else:
+            for item in self.scene().items():
+                if isinstance(item, ToolDef):
+                    print item.profile
     # def mouseMoveEvent(self, e):
     #     print self.mapToScene(e.pos())
     def wheelEvent(self, e):
