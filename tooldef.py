@@ -168,7 +168,7 @@ class ToolDef(QGraphicsPathItem):
         self.commentText.setToolTip("name")
         # The right side of the profile as described in this module's document
         # string.
-        self.profile = None
+        self._profile = None
         # True if there is an extra step in the profile for cases where the
         # shankDiam != another diameter of the tool. Usually the cutter dia.
         self.hasStep = False
@@ -176,6 +176,21 @@ class ToolDef(QGraphicsPathItem):
         self.prepareGeometryChange()
         self._updateProfile()
         self.dirty = False
+    def profile(self):
+        if self.isMetric():
+            result = []
+            for e in self._profile:
+                if len(e) == 2:
+                    x, y = e
+                    result.append((x / 25.4, y / 25.4))
+                else:
+                    (ex, ey), (cx, cy), d = e
+                    result.append(((ex / 25.4, ey / 25.4),
+                                   (cx / 25.4, cy / 25.4),
+                                   d))
+            return result
+        else:
+            return self._profile
     def paint(self, painter, option, widget):
         """Draw a centerline.
         """
@@ -452,9 +467,9 @@ class DrillDef(ToolDef):
         pp.lineTo(p3[0], p3[1])
         self.setPath(pp)
         if self.hasStep:
-            self.profile = [p1, p2, p3, p4, p5, p6]
+            self._profile = [p1, p2, p3, p4, p5, p6]
         else:
-            self.profile = [p1, p2, p5, p6]
+            self._profile = [p1, p2, p5, p6]
         return [p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen, sdia, flen]
     def _updateDims(self, p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen,
                     sdia, flen):
@@ -605,7 +620,7 @@ class SpotDrillDef(ToolDef):
         # left
         pp.addPath(mirTx.map(pp))
         self.setPath(pp)
-        self.profile = [p1, p2, p3, p4]
+        self._profile = [p1, p2, p3, p4]
         return p1, p2, p3, p4, dia, oal
     def _updateDims(self, p1, p2, p3, p4, dia, oal):
         metric = self.specs['metric']
@@ -696,7 +711,7 @@ class CenterDrillDef(ToolDef):
         pp.lineTo(*p4)
         pp.lineTo(*p5)
         pp.lineTo(*p6)
-        self.profile = [p1, p2, p3, p4, p5, p6]
+        self._profile = [p1, p2, p3, p4, p5, p6]
         # # left
         pp.addPath(mirTx.map(pp))
         self.setPath(pp)
@@ -786,9 +801,9 @@ class EndMillDef(ToolDef):
         pp.lineTo(*p3)
         self.setPath(pp)
         if self.hasStep:
-            self.profile = [p1, p2, p3, p4, p5, p6]
+            self._profile = [p1, p2, p3, p4, p5, p6]
         else:
-            self.profile = [p1, p2, p5, p6]
+            self._profile = [p1, p2, p5, p6]
         return p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen):
         """Attempt to intelligently position the dimensions and name label.
@@ -942,7 +957,6 @@ class TaperEndMillDef(ToolDef):
             pp.lineTo(*p4)
         pp.lineTo(*p5)
         pp.lineTo(*p6)
-        self.profile = QPainterPath(pp)
         # left side
         pp.addPath(mirTx.map(pp))
         # diagonal line to show flute
@@ -950,9 +964,9 @@ class TaperEndMillDef(ToolDef):
         pp.lineTo(*p3)
         self.setPath(pp)
         if self.hasStep:
-            self.profile = [p1, p2, p3, p4, p5, p6]
+            self._profile = [p1, p2, p3, p4, p5, p6]
         else:
-            self.profile = [p1, p2, p5, p6]
+            self._profile = [p1, p2, p5, p6]
         return p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen, a
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen,
                     a):
@@ -1098,9 +1112,9 @@ class TaperBallMillDef(TaperEndMillDef):
         pp.lineTo(*p3)
         self.setPath(pp)
         if self.hasStep:
-            self.profile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4, p5, p6]
+            self._profile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4, p5, p6]
         else:
-            self.profile = [p1, (p2, (0.0, srad), 'cclw'), p3, p5, p6]
+            self._profile = [p1, (p2, (0.0, srad), 'cclw'), p3, p5, p6]
         return p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal, flen, a
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal,
                     flen, a):
@@ -1240,9 +1254,9 @@ class BallMillDef(EndMillDef):
         pp.lineTo(*p3)
         self.setPath(pp)
         if self.hasStep:
-            self.profile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4, p5, p6]
+            self._profile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4, p5, p6]
         else:
-            self.profile = [p1, (p2, (0.0, frad), 'cclw'), p5, p6]
+            self._profile = [p1, (p2, (0.0, frad), 'cclw'), p5, p6]
         return p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen):
         """Attempt to intelligently position the dimensions and name label.
@@ -1383,10 +1397,10 @@ class BullMillDef(EndMillDef):
         pp.lineTo(*p4)
         self.setPath(pp)
         if self.hasStep:
-            self.profile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'), p4, p5, p6,
+            self._profile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'), p4, p5, p6,
                             p7]
         else:
-            self.profile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'), p6, p7]
+            self._profile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'), p6, p7]
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen, r
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen,
                     r):
@@ -1573,11 +1587,11 @@ class WoodruffMillDef(ToolDef):
         pp.lineTo(p3[0], p3[1])
         self.setPath(pp)
         if self.hasStep:
-            self.profile = [p1, p2, p3, p4, (p5, (arcOrigin.x(),
+            self._profile = [p1, p2, p3, p4, (p5, (arcOrigin.x(),
                                                   arcOrigin.y()),
                                              'clw'), p6, p7]
         else:
-            self.profile = [p1, p2, p3, p4, p6, p7]
+            self._profile = [p1, p2, p3, p4, p6, p7]
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia,
                     flen):
@@ -1751,10 +1765,10 @@ class RadiusMillDef(ToolDef):
         self.setPath(pp)
         rc = rect.center()
         if self.hasStep:
-            self.profile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'), p5, p6,
+            self._profile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'), p5, p6,
                             p7, p8, p9]
         else:
-            self.profile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'), p5, p8,
+            self._profile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'), p5, p8,
                             p9]
         return p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal, bdia, blen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal,
@@ -1904,7 +1918,7 @@ class DovetailMillDef(EndMillDef):
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
         self.setPath(pp)
-        self.profile = [p1, p2, p3, p4, p5, p6, p7, p8]
+        self._profile = [p1, p2, p3, p4, p5, p6, p7, p8]
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal, flen, a
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal,
                     flen, a):

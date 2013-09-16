@@ -24,7 +24,7 @@ class MainWindow(QMainWindow):
                                          qt.LeftDockWidgetArea)
         self.tdefWidget = ToolDefWidget()
         self.toolDefDock.setWidget(self.tdefWidget)
-        self.addDockWidget(qt.LeftDockWidgetArea, self.toolDefDock)
+        self.addDockWidget(qt.RightDockWidgetArea, self.toolDefDock)
     def closeEvent(self, e):
         toolBrowser = self.tdefWidget.toolBrowser
         if toolBrowser.isDirty():

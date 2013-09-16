@@ -16,18 +16,14 @@ import OpenGL.GLU as glu
 class MeshView(QGLWidget):
     """An OpenGL viewer with pan/rotate/zoom + fixed orientation views.
     """
-    # TODO: temporary quadratic
-    quadratic = glu.gluNewQuadric()
     def __init__(self, parent):
         super(MeshView, self).__init__(parent)
-        # TODO: reset to 0 when Mesh is implemented
-        self.rotCenter = [0.0, 0.0, 0.5]
+        self.rotCenter = [0.0, 0.0, 0.0]
         self.modelviewMatrix = [[1.0, 0.0, 0.0, 0.0],
                                 [0.0, 1.0, 0.0, 0.0],
                                 [0.0, 0.0, 1.0, 0.0],
                                 [0.0, 0.0, 0.0, 1.0]]
-        # TODO: reset to 0 when Mesh is implemented
-        self.sceneCenter = [0.0, 0.5]
+        self.sceneCenter = [0.0, 0.0]
         self.sceneWidth = 5.0
         self.sceneHeight = 5.0
         self.aspect = 1.0
@@ -37,6 +33,12 @@ class MeshView(QGLWidget):
         self.maxZoom = 30.0
         self.setMouseTracking(True)
         self.createContextMenu()
+        self.mesh = None
+    def setMesh(self, mesh):
+        self.mesh = mesh
+        self.updateGL()
+    def setRotCenter(self, p):
+        self.rotCenter = p
     # TODO: too lazy
     def createContextMenu(self):
         self.setContextMenuPolicy(qt.ActionsContextMenu)
@@ -64,6 +66,8 @@ class MeshView(QGLWidget):
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
     def sizeHint(self):
         return QSize(500, 500)
+    def minimumSizeHint(self):
+        return QSize(100, 100)
     def pixelSize(self, projMatrix):
         """Find the size of a pixel in scene coordinates.
 
@@ -102,23 +106,20 @@ class MeshView(QGLWidget):
         self.updateGL()
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-        glu.gluSphere(MeshView.quadratic, 1, 32, 32)
-        glu.gluCylinder(MeshView.quadratic, 0.5, 0.5, 2, 32, 32)
-        gl.glPushMatrix()
-        gl.glTranslatef(0, 0, 2)
-        glu.gluDisk(MeshView.quadratic, 0, 0.5, 32, 2)
-        gl.glPopMatrix()
+        if self.mesh:
+            self.mesh.render()
+        axisLen = 2.0
         gl.glDisable(gl.GL_LIGHTING)
         gl.glBegin(gl.GL_LINES)
         gl.glColor(1, 0, 0)
         gl.glVertex3f(0, 0, 0)
-        gl.glVertex3f(3, 0, 0)
+        gl.glVertex3f(axisLen, 0, 0)
         gl.glColor(0, 1, 0)
         gl.glVertex3f(0, 0, 0)
-        gl.glVertex3f(0, 3, 0)
+        gl.glVertex3f(0, axisLen, 0)
         gl.glColor(0, 0, 1)
         gl.glVertex3f(0, 0, 0)
-        gl.glVertex3f(0, 0, 3)
+        gl.glVertex3f(0, 0, axisLen)
         gl.glEnd()
         gl.glEnable(gl.GL_LIGHTING)
     def topView(self):
@@ -155,7 +156,7 @@ class MeshView(QGLWidget):
         """
         gl.glLoadIdentity()
         gl.glRotate(-90.0, 1.0, 0.0, 0.0)
-        self.modelviewMatrix = gl.glGetDoublev(gl.GL_MODELVIEW_MATRIX)
+        self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         self.updateGL()
     def backView(self):
         """Rotate to view the -X/Z plane.
@@ -190,7 +191,7 @@ class MeshView(QGLWidget):
         gl.glLoadIdentity()
         # now shift/rotate/unshift and mulitiply
         gl.glTranslatef(m[3][0], m[3][1], m[3][2])
-        gl.glRotatef(self.rotFactor * axis.length(),
+        gl.glRotate(self.rotFactor * axis.length(),
                      axisN.x(), axisN.y(), axisN.z())
         gl.glTranslatef(-m[3][0], -m[3][1], -m[3][2])
         gl.glMultMatrixf(self.modelviewMatrix)

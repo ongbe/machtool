@@ -17,6 +17,7 @@ from PyQt4.QtCore import Qt as qt
 from tooldefscene import ToolDefScene
 from tooldefview import ToolDefView
 from tooldef import *
+from mesh import RevolvedMesh
 
 # ToolDef class to tool category
 TDEF2CAT = {DrillDef: 'Twist Drill',
@@ -259,6 +260,9 @@ class ToolDefWidget(QWidget):
         self.tdefScene.addItem(self.toolDef)
         self.toolDef.config(specs)
         self.showToolDefView()
+        mesh = RevolvedMesh(self.toolDef.profile())
+        # TODO: signals/slots
+        self.parent().parent().meshview.setMesh(mesh)
     def showToolBrowserView(self):
         """Replace the ToolDefView with the ToolBrowserView
         
@@ -323,6 +327,9 @@ class ToolDefWidget(QWidget):
         self.tdefView.setFocus()
         self.tdefView.fitAll()
         self.saveToolButton.setEnabled(self.toolDef.isDirty())
+        mesh = RevolvedMesh(self.toolDef.profile())
+        # TODO: signals/slots
+        self.parent().parent().meshview.setMesh(mesh)
     def saveCurrentTool(self):
         result = self.toolBrowser.addTool(self.toolDef)
         if result:
