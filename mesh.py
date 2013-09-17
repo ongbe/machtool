@@ -13,6 +13,7 @@ from PyQt4.QtGui import QVector2D
 import OpenGL.GL as gl
 
 from arc import arcFromVectors
+from bbox import BBox
 
 pi2 = pi*2
 
@@ -25,6 +26,7 @@ class Mesh(object):
     def __init__(self):
         self.indices = []
         self.vertices = []
+        self.sharedVertices = []
         self.normals = []
         self.nTris = 0
         self.nVertices = 0
@@ -40,7 +42,12 @@ class Mesh(object):
         gl.glDrawElements(gl.GL_TRIANGLES, self.nTris * 3, gl.GL_UNSIGNED_INT,
                           self.indices)
         gl.glDisableClientState(gl.GL_VERTEX_ARRAY);
+    def bbox(self):
+        """Find the coordinate-aligned bounding box of this meshes vertices.
 
+        Return a BBox instance.
+        """
+        return BBox.fromVertices(self.sharedVertices)
 
 class RevolvedMesh(Mesh):
     segs = 24
@@ -53,8 +60,6 @@ class RevolvedMesh(Mesh):
             rangs.append(step * i)
         rangs.append(0.0)
         self.angpairs = list(windowItr(rangs, 2, 1))
-        print
-        print profile
         for e1, e2 in windowItr(profile, 2, 1):
             d = None
             if e2 is None:
@@ -71,20 +76,16 @@ class RevolvedMesh(Mesh):
                 self.addArcSeg(x1, y1, x2, y2, cx, cy, d)
             else:
                 self.addLineSeg(x1, y1, x2, y2)
+        self.vertices = self.sharedVertices
         print 'nTris', self.nTris
         print 'nVertices', self.nVertices
     def _addVertex(self, v):
-        self.vertices.append(v)
-        self.nVertices += 1
-        return self.nVertices - 1
-    # shared vertex version
-    # def _addVertex(self, v):
-    #     if v in self.vertices:
-    #         return self.vertices.index(v)
-    #     else:
-    #         self.vertices.append(v)
-    #         self.nVertices += 1
-    #         return self.nVertices - 1
+        if v in self.sharedVertices:
+            return self.sharedVertices.index(v)
+        else:
+            self.sharedVertices.append(v)
+            self.nVertices += 1
+            return self.nVertices - 1
     def addLineSeg(self, x1, z1, x2, z2):
         # tip triangle fan, p1 == tip
         if x1 == 0.0:
@@ -141,7 +142,6 @@ class RevolvedMesh(Mesh):
         for i in range(1, segs):
             rangs.append(radians(sa + step * i))
         rangs.append(radians(arc.endAngle()))
-        print list(windowItr(rangs, 2, 1))
         for a1, a2 in list(windowItr(rangs, 2, 1)):
             sa1 = sin(a1)
             ca1 = cos(a1)
@@ -152,5 +152,3 @@ class RevolvedMesh(Mesh):
             x2 = cx + r * ca2
             z2 = cz + r * sa2
             self.addLineSeg(x1, z1, x2, z2)
-        
-        
