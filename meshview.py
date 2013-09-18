@@ -24,7 +24,6 @@ class MeshView(GLView):
     def setMesh(self, mesh):
         self.mesh = mesh
         self.setRotCenter(mesh.bbox().center())
-        self.isometricView()
     def createContextMenu(self):
         super(MeshView, self).createContextMenu()
         a = QAction("Fit", self)
@@ -51,7 +50,8 @@ class MeshView(GLView):
         if self.mesh is None:
             return
         mappedVerts = []
-        for meshVert in self.mesh.sharedVertices:
+        # TODO: get shared vertices here, not all of them
+        for meshVert in self.mesh.sharedVertices():
             v = self.mxv(self.modelviewMatrix, meshVert)
             mappedVerts.append(v)
         bbox = BBox.fromVertices(mappedVerts)

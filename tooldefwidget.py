@@ -263,6 +263,7 @@ class ToolDefWidget(QWidget):
         mesh = RevolvedMesh(self.toolDef.profile())
         # TODO: signals/slots
         self.parent().parent().meshview.setMesh(mesh)
+        self.parent().parent().meshview.frontView()
     def showToolBrowserView(self):
         """Replace the ToolDefView with the ToolBrowserView
         
@@ -330,6 +331,7 @@ class ToolDefWidget(QWidget):
         mesh = RevolvedMesh(self.toolDef.profile())
         # TODO: signals/slots
         self.parent().parent().meshview.setMesh(mesh)
+        self.parent().parent().meshview.updateGL()
     def saveCurrentTool(self):
         result = self.toolBrowser.addTool(self.toolDef)
         if result:

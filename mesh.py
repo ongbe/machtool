@@ -9,7 +9,7 @@ Sunday, September 15 2013
 from math import pi, radians, degrees, sin, cos, sqrt
 
 # from PyQt4.QtOpenGL import *
-from PyQt4.QtGui import QVector2D
+from PyQt4.QtGui import QVector2D, QVector3D
 import OpenGL.GL as gl
 
 from arc import arcFromVectors
@@ -22,110 +22,94 @@ def windowItr(seq, sz, step):
     for i in range(0, n * step, step):
         yield seq[i:i+sz]
 
-class Mesh(object):
-    def __init__(self):
-        self.indices = []
-        self.vertices = []
-        self.sharedVertices = []
-        self.normals = []
-        self.nTris = 0
-        self.nVertices = 0
-    def loadArrays(self):
-        gl.glVertexPointer(3, gl.GL_FLOAT, 0, self.vertices)
-        # glNormalPointer(GL_FLOAT, 0, self.normals)
-    def render(self):
-        gl.glColor(1, 1, 1)
-        gl.glDisable(gl.GL_LIGHTING)
-        gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
-        self.loadArrays()
-        gl.glEnableClientState(gl.GL_VERTEX_ARRAY);
-        gl.glDrawElements(gl.GL_TRIANGLES, self.nTris * 3, gl.GL_UNSIGNED_INT,
-                          self.indices)
-        gl.glDisableClientState(gl.GL_VERTEX_ARRAY);
-    def bbox(self):
-        """Find the coordinate-aligned bounding box of this meshes vertices.
+class Patch(object):
+    """A section of a Mesh.
 
-        Return a BBox instance.
+    Smooth normals are computed per patch. This results in sharp edges between
+    non-tangent patches. Each patch contains an index into its parent mesh's
+    vertices.
+    """
+    def __init__(self, mesh):
+        """Initialize a Patch
+
+        mesh -- Mesh, parent
         """
-        return BBox.fromVertices(self.sharedVertices)
+        self._mesh = mesh
+        # number of triangles in this patch
+        self._nTris = 0
+        # offset into mesh._indices where this patch starts
+        self._startIndex = mesh.vertexCount()
+        # If this patch is a cone, this is the apex vertex
+        self._apexVertex = None
+    def addTri(self, a, b, c, apexVertex=None):
+        """Add a triangle.
 
-class RevolvedMesh(Mesh):
-    segs = 24
-    def __init__(self, profile):
-        super(RevolvedMesh, self).__init__()
-        segs = 32
-        step = pi2 / self.segs
-        rangs = [0.0]
-        for i in range(1, self.segs):
-            rangs.append(step * i)
-        rangs.append(0.0)
-        self.angpairs = list(windowItr(rangs, 2, 1))
-        for e1, e2 in windowItr(profile, 2, 1):
-            d = None
-            if e2 is None:
-                break
-            if len(e1) == 2:
-                x1, y1 = e1
-            else:
-                (x1, y1), _, _ = e1
-            if len(e2) == 2:
-                x2, y2 = e2
-            else:
-                (x2, y2), (cx, cy), d = e2
-            if d:
-                self.addArcSeg(x1, y1, x2, y2, cx, cy, d)
-            else:
-                self.addLineSeg(x1, y1, x2, y2)
-        self.vertices = self.sharedVertices
-        print 'nTris', self.nTris
-        print 'nVertices', self.nVertices
-    def _addVertex(self, v):
-        if v in self.sharedVertices:
-            return self.sharedVertices.index(v)
-        else:
-            self.sharedVertices.append(v)
-            self.nVertices += 1
-            return self.nVertices - 1
-    def addLineSeg(self, x1, z1, x2, z2):
-        # tip triangle fan, p1 == tip
+        a, b, c -- [x, y, z]
+                   The three vertices, given in CCLW winding order.
+        apexVertex -- [x, y, z]
+                      The apex vertice, for a cone tip. Must be the same as a,
+                      b, or c, or None.
+
+        Return None.
+        """
+        self._apexVertex = apexVertex
+        # triangle normal
+        n = QVector3D.normal(QVector3D(*a),
+                             QVector3D(*b),
+                             QVector3D(*c))
+        n = [n.x(), n.y(), n.z()]
+        self._mesh.addVertex(a, n)
+        self._mesh.addVertex(b, n)
+        self._mesh.addVertex(c, n)
+        self._nTris += 1
+    def addQuad(self, a, b, c, d):
+        """Add a quad.
+
+        a, b, c, d -- [x, y, z]
+
+        The quad is split into two triangles and added. The points must be
+        given in cclw winding order.
+
+        c o---o b
+          |  /|
+          | / |
+        d o---o a
+        """
+        self.addTri(a, b, c)
+        self.addTri(a, c, d)
+    def addRevLineSeg(self, x1, z1, x2, z2):
+        # tip triangles
         if x1 == 0.0:
-            i = self._addVertex([float(x1), 0.0, float(z1)])
-            for a1, a2 in self.angpairs:
+            a = [float(x1), 0.0, float(z1)]
+            for a1, a2 in self._mesh.anglePairs():
                 r = x2
-                p2 = [r * cos(a2), r * sin(a2), z2]
-                p3 = [r * cos(a1), r * sin(a1), z2]
-                self.indices.append(i)
-                self.indices.append(self._addVertex(p2))
-                self.indices.append(self._addVertex(p3))
-                self.nTris += 1
+                b = [r * cos(a2), r * sin(a2), z2]
+                c = [r * cos(a1), r * sin(a1), z2]
+                self.addTri(a, b, c, a)
         # shank end triangle fan, p1 = top center
         elif x2 == 0.0:
-            i = self._addVertex([float(x2), 0.0, float(z2)])
-            for a1, a2 in self.angpairs:
-                p2 = [x1 * cos(a1), x1 * sin(a1), z1]
-                p3 = [x1 * cos(a2), x1 * sin(a2), z1]
-                self.indices.append(i)
-                self.indices.append(self._addVertex(p2))
-                self.indices.append(self._addVertex(p3))
-                self.nTris += 1
+            a = [float(x2), 0.0, float(z2)]
+            for a1, a2 in self._mesh.anglePairs():
+                b = [x1 * cos(a1), x1 * sin(a1), z1]
+                c = [x1 * cos(a2), x1 * sin(a2), z1]
+                self.addTri(a, b, c, a)
         # triangle strip
-        # i3 o--o i4
-        #    | /|
-        #    |/ |
-        # i1 o--o i2
+        # d o--o c
+        #   | /|
+        #   |/ |
+        # a o--o b
         else:
-            for a1, a2 in self.angpairs:
+            for a1, a2 in self._mesh.anglePairs():
                 sa1 = sin(a1)
                 ca1 = cos(a1)
                 sa2 = sin(a2)
                 ca2 = cos(a2)
-                i1 = self._addVertex([x1 * ca1, x1 * sa1, z1])
-                i2 = self._addVertex([x1 * ca2, x1 * sa2, z1])
-                i3 = self._addVertex([x2 * ca1, x2 * sa1, z2])
-                i4 = self._addVertex([x2 * ca2, x2 * sa2, z2])
-                self.indices.extend([i1, i2, i4, i1, i4, i3])
-                self.nTris += 2
-    def addArcSeg(self, x1, z1, x2, z2, cx, cz, arcDir):
+                self.addQuad([x1 * ca1, x1 * sa1, z1],
+                             [x1 * ca2, x1 * sa2, z1],
+                             [x2 * ca2, x2 * sa2, z2],
+                             [x2 * ca1, x2 * sa1, z2])
+        
+    def addRevArcSeg(self, x1, z1, x2, z2, cx, cz, arcDir):
         a = x1 - cx
         b = z1 - cz
         r = sqrt(a*a + b*b)
@@ -133,7 +117,7 @@ class RevolvedMesh(Mesh):
                              QVector2D(x2 - cx, z2 - cz),
                              r,
                              arcDir == 'cclw')
-        angstep = 360.0 / self.segs
+        angstep = 360.0 / self._mesh.segs
         # minimum 4 segments in the arc
         segs = max(int(abs(arc.span()) / angstep), 3) + 1
         step = arc.span() / segs
@@ -151,4 +135,135 @@ class RevolvedMesh(Mesh):
             z1 = cz + r * sa1
             x2 = cx + r * ca2
             z2 = cz + r * sa2
-            self.addLineSeg(x1, z1, x2, z2)
+            self.addRevLineSeg(x1, z1, x2, z2)
+    @staticmethod
+    def fromRevLineSeg(x1, z1, x2, z2, mesh):
+        """Create a revolved Patch from a line segment.
+
+        x1, z1, x2, z2 -- line start and end coords
+        mesh -- Mesh, parent
+
+        Return a new Patch instance
+        """
+        patch = Patch(mesh)
+        patch.addRevLineSeg(x1, z1, x2, z2)
+        return patch
+    @staticmethod
+    def fromRevArcSeg(x1, z1, x2, z2, cx, cz, arcDir, mesh):
+        """Create a revolved Patch from an arc segment.
+
+        x1, z1 -- arc start point
+        x2, z2 -- arc end point
+        cx, cy -- arc center point
+        arcDir -- 'cclw' or 'clw'
+        mesh -- Mesh, parent
+
+        Return a new Patch instance
+        """
+        patch = Patch(mesh)
+        patch.addRevArcSeg(x1, z1, x2, z2, cx, cz, arcDir)
+        return patch
+    def calcNormals(self):
+        """Recalculate all normals to produce smooth shading.
+        """
+        pass
+    def render(self):
+        # gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
+        # gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+        #                 [0.2, 0.2, 0.2, 1.0])
+        # gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
+        #                 [0.2, 0.2, 0.2, 1.0])
+        gl.glDrawElements(gl.GL_TRIANGLES, self._nTris * 3,
+                          gl.GL_UNSIGNED_INT,
+                          self._mesh.indices()[self._startIndex:])
+        
+
+class Mesh(object):
+    """A Collection of Patch instances.
+    """
+    def __init__(self):
+        # Patch instances
+        self._patches = []
+        # integer, indices into vertices
+        self._indices = []
+        # [x, y, z], all vertices of every triangle in the mesh
+        self._vertices = []
+        # [i, j, k], associated normals
+        self._normals = []
+        # [x, y, z], the unique set of all vertices, for bbox calc
+        self._sharedVertices = []
+        # integer, self.vertices count
+        self._nVertices = 0
+        # integer, self.indices count
+        self._nIndices = 0
+    def addVertex(self, v, n):
+        if v not in self._sharedVertices:
+            self._sharedVertices.append(v)
+        self._vertices.append(v)
+        self._normals.append(n)
+        self._indices.append(self._nVertices)
+        self._nVertices += 1
+    def indexCount(self):
+        """Return the length of self.indices (cached)
+        """
+        return self._nIndices
+    def vertexCount(self):
+        """Return the length of self.vertices (cached)
+        """
+        return self._nVertices
+    def sharedVertices(self):
+        return self._sharedVertices
+    def indices(self):
+        return self._indices
+    def bbox(self):
+        """Find the coordinate-aligned bounding box of this meshes vertices.
+
+        Return a BBox instance.
+        """
+        return BBox.fromVertices(self._sharedVertices)
+    def render(self):
+        gl.glVertexPointer(3, gl.GL_FLOAT, 0, self._vertices);
+        gl.glNormalPointer(gl.GL_FLOAT, 0, self._normals);
+        gl.glEnableClientState(gl.GL_VERTEX_ARRAY);
+        gl.glEnableClientState(gl.GL_NORMAL_ARRAY);
+        for patch in self._patches:
+            patch.render()
+        gl.glDisableClientState(gl.GL_VERTEX_ARRAY);
+        gl.glDisableClientState(gl.GL_NORMAL_ARRAY);
+
+
+class RevolvedMesh(Mesh):
+    segs = 32
+    def __init__(self, profile):
+        super(RevolvedMesh, self).__init__()
+        step = pi2 / self.segs
+        rangs = [0.0]
+        for i in range(1, self.segs):
+            rangs.append(step * i)
+        rangs.append(0.0)
+        self._anglePairs = list(windowItr(rangs, 2, 1))
+        self._build(profile)
+    def anglePairs(self):
+        return self._anglePairs
+    def _build(self, profile):
+        for e1, e2 in windowItr(profile, 2, 1):
+            d = None
+            if e2 is None:
+                break
+            if len(e1) == 2:
+                x1, y1 = e1
+            else:
+                (x1, y1), _, _ = e1
+            if len(e2) == 2:
+                x2, y2 = e2
+            else:
+                (x2, y2), (cx, cy), d = e2
+            if d:
+                patch = Patch.fromRevArcSeg(x1, y1, x2, y2, cx, cy, d, self)
+                self._patches.append(patch)
+            else:
+                patch = Patch.fromRevLineSeg(x1, y1, x2, y2, self)
+                self._patches.append(patch)
+        # print 'vertices', self.vertexCount()
+        # print 'sharedvs', len(self._sharedVertices)
+

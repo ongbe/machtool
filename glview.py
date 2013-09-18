@@ -48,11 +48,8 @@ class GLView(QGLWidget):
         gl.glClearColor(0.0, 0.25, 0.25, 1.0)
         gl.glEnable(gl.GL_DEPTH_TEST)
         gl.glEnable(gl.GL_CULL_FACE)
-        # gl.glEnable(gl.GL_NORMALIZE)
-        # gl.glShadeModel(gl.GL_SMOOTH)
         gl.glEnable(gl.GL_LIGHTING)
         gl.glEnable(gl.GL_LIGHT0)
-        # gl.glEnable(gl.GL_MULTISAMPLE)
         lightPosition = [50, 50, 170]
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, lightPosition)
         # default to front view
@@ -263,10 +260,10 @@ class GLView(QGLWidget):
                                 cy + dy * self.sceneHeight]
         else:
             # zoom out with no shift
-            sw = self.sceneHeight * 1.1
+            sw = self.sceneHeight * 1.2
             if sw > self.maxZoom:
                 return
             self.sceneWidth = sw
-            self.sceneHeight *= 1.1
+            self.sceneHeight *= 1.2
         self.ortho()
         self.updateGL()
