@@ -181,7 +181,7 @@ class GLView(QGLWidget):
         axisN = axis.normalized()
         # find the rotation center point @ the current rotation
         gl.glPushMatrix()
-        gl.glTranslatef(*[x for x in self.rotCenter])
+        gl.glTranslatef(*self.rotCenter)
         m = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         gl.glPopMatrix()
         gl.glLoadIdentity()
@@ -199,15 +199,11 @@ class GLView(QGLWidget):
         self.sceneCenter[0] -= pw * dx
         self.sceneCenter[1] += ph * dy
         self.ortho()
-    # TODO: buggy, the margin is not always consistent
-    def fit(self, p1, p2, pad=10):
+    def fit(self, p1, p2):
         """Fit the rectangle define by the two points into the scene.
 
         p1, p2 -- rectangle opposite sides
-        pad -- margin in pixels
         """
-        margin = self.pixelSize(gl.glGetFloat(gl.GL_PROJECTION_MATRIX))[0] \
-                      * pad
         x1 = p1.x()
         y1 = p1.y()
         x2 = p2.x()
@@ -218,9 +214,10 @@ class GLView(QGLWidget):
             return
         self.sceneCenter = [(x1 + x2) * 0.5, (y1 + y2) * 0.5]
         if float(w) / h >= self.aspect:
-            self.sceneHeight = w / self.aspect + margin * 2.0
+            self.sceneHeight = w / self.aspect
         else:
-            self.sceneHeight = margin * 2.0 + h
+            self.sceneHeight = h
+        self.sceneHeight *= 1.02 # just a little padding
         self.ortho()
     def mouseMoveEvent(self, e):
         """Left button rotate, middle button pan

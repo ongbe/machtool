@@ -58,3 +58,48 @@ class BBox(object):
             p1 = [min(x, p1[0]), min(y, p1[1]), min(z, p1[2])]
             p2 = [max(x, p2[0]), max(y, p2[1]), max(z, p2[2])]
         return BBox(p1, p2)
+    def xLen(self):
+        return self.p2[0] - self.p1[0]
+    def yLen(self):
+        return self.p2[1] - self.p1[2]
+    def zLen(self):
+        return self.p2[2] - self.p1[2]
+    def left(self):
+        return self.p1[0]
+    def right(self):
+        return self.p2[0]
+    def top(self):
+        return self.p2[2]
+    def bottom(self):
+        return self.p1[2]
+    def front(self):
+        return self.p1[1]
+    def back(self):
+        return self.p2[1]
+    def vertices(self):
+        """Return a list of of the boxes corner points
+        
+                   7 o--------o 6
+                    /|       /|
+                   / |      / |                     
+                3 o--------o 2|
+                  |4 o-----|--o 5
+                  | /      | /
+                  |/       |/
+                0 o--------o 1
+        """
+        left = self.left()
+        right = self.right()
+        top = self.top()
+        bottom = self.bottom()
+        front = self.front()
+        back = self.back()
+        return [[left, front, bottom],
+                [right, front, bottom],
+                [right, front, top],
+                [left, front, top],
+                [left, back, bottom],
+                [right, back, bottom],
+                [right, back, top],
+                [left, back, top]]
+                

@@ -10,6 +10,7 @@ from math import pi, radians, degrees, sin, cos, sqrt
 
 # from PyQt4.QtOpenGL import *
 from PyQt4.QtGui import QVector2D, QVector3D
+from PyQt4.QtCore import QPointF
 import OpenGL.GL as gl
 
 from arc import arcFromVectors
@@ -43,6 +44,8 @@ class Patch(object):
         self._apexVertex = None
         # indices into the parent mesh's vertex list
         self._indices = []
+    def startIndex(self):
+        return self._startIndex
     def addTri(self, a, b, c, apexVertex=None):
         """Add a triangle.
 
@@ -200,17 +203,36 @@ class Mesh(object):
         self._sharedVertices = []
         # integer, self.vertices count
         self._nVertices = 0
+        # if true, include the previous patches vertices when summing normals
+        self._prevStartIndex = 1e10
+        # vertice bounding box
+        self._bbox = None
+    def blendTangent(self, blend):
+        if blend and self._patches:
+            self._prevStartIndex = self._patches[-1].startIndex()
+        else:
+            self._prevStartIndex = 1e10
+    def verticesEqual(self, v1, v2, eps=1e-3):
+        if abs(v1[0] - v2[0]) >= eps:
+            return False
+        if abs(v1[1] - v2[1]) >= eps:
+            return False
+        if abs(v1[2] - v2[2]) >= eps:
+            return False
+        return True
     def addVertex(self, v, n, startIndex):
-        if v not in self._sharedVertices:
-            self._sharedVertices.append(v)
+        startIndex = min(startIndex, self._prevStartIndex)
         i = self._nVertices - 1
         while i >= startIndex:
-            if self._vertices[i] == v:
+            # if self._vertices[i] == v:
+            if self.verticesEqual(self._vertices[i], v):
                 # vertex found
                 # sum its normal with the duplicate vertex's normal
                 nn = QVector3D(*self._normals[i])
                 nn += QVector3D(*n)
                 nn.normalize()
+                # if v[0] == 0.0 and v[1] == 0.0:
+                #     print nn
                 self._normals[i] = [nn.x(), nn.y(), nn.z()]
                 return i
             i -= 1
@@ -219,23 +241,18 @@ class Mesh(object):
         self._normals.append(n)
         self._nVertices += 1
         return self._nVertices - 1
-    def indexCount(self):
-        """Return the length of self.indices (cached)
-        """
-        return self._nIndices
     def vertexCount(self):
         """Return the length of self.vertices (cached)
         """
         return self._nVertices
     def sharedVertices(self):
         return self._sharedVertices
-    def indices(self):
-        return self._indices
     def bbox(self):
         """Find the coordinate-aligned bounding box of this meshes vertices.
 
         Return a BBox instance.
         """
+        return self._bbox
         return BBox.fromVertices(self._sharedVertices)
     def render(self):
         gl.glVertexPointer(3, gl.GL_DOUBLE, 0, self._vertices);
@@ -249,7 +266,7 @@ class Mesh(object):
 
 
 class RevolvedMesh(Mesh):
-    segs = 32
+    segs = 24
     def __init__(self, profile):
         super(RevolvedMesh, self).__init__()
         step = pi2 / self.segs
@@ -261,25 +278,101 @@ class RevolvedMesh(Mesh):
         self._build(profile)
     def anglePairs(self):
         return self._anglePairs
+    def _isLineTanToArc(self, x1, y1, x2, y2, cx, cy, d):
+        """Find if the line is tangent to the arc.
+
+        x1, y1 -- [x, y], line start point
+        x2, y2 -- [x, y], line end, arc start
+        cx, cy -- [x, y], arc center point
+        d -- 'clw' or 'cclw'
+
+        It is assumed that the line end point and the arc start point are the
+        same.
+
+        Return True or False.
+        """
+        p = QPointF(x2, y2)
+        # line start -> end
+        v1 = QVector2D(p - QPointF(x1, y1)).normalized()
+        # arc center -> arc start
+        v2 = QVector2D(p - QPointF(cx, cy)).normalized()
+        if abs(v1.dotProduct(v1, v2)) <= 1e-6:
+            # TODO: handle case where arc turns back into the line
+            return True
+        else:
+            return False
+    # TODO: untested
+    def _isArcTangentToArc(self, px, py, cx1, cy1, cx2, cy2):
+        """Find if two arcs are tangent
+
+        px, p1 -- [x, y], common point of arcs
+        cxN, cyN -- [x, y], arc center points
+
+        It is assumed that the arcs share a common point.
+
+        Return True or Fasle
+        """
+        p = QPointF(px, py)
+        v1 = QVector2D(p - QPointF(cx1, cy1)).normalized()
+        v2 = QVector2D(p - QPointF(cx1, cy1)).normalized()
+        if abs(v1.dotProduct(v1, v2)) <= 1e-6:
+            # TODO: handle case where arc turns back into the other arc
+            return True
+        else:
+            return False
     def _build(self, profile):
+        # previous line start x/y, for line -> arc
+        px1 = py1 = None
         for e1, e2 in windowItr(profile, 2, 1):
-            d = None
             if e2 is None:
                 break
-            if len(e1) == 2:
+            le1 = len(e1)
+            le2 = len(e2)
+            # line or start -> line
+            if le1 == 2 and le2 == 2:
                 x1, y1 = e1
-            else:
-                (x1, y1), _, _ = e1
-            if len(e2) == 2:
                 x2, y2 = e2
-            else:
-                (x2, y2), (cx, cy), d = e2
-            if d:
-                patch = Patch.fromRevArcSeg(x1, y1, x2, y2, cx, cy, d, self)
-                self._patches.append(patch)
-            else:
+                self.blendTangent(False)
                 patch = Patch.fromRevLineSeg(x1, y1, x2, y2, self)
                 self._patches.append(patch)
-
-
+                px1 = x1
+                py1 = y1
+            # line or start -> arc
+            elif le1 == 2 and le2 == 3:
+                x1, y1 = e1
+                (x2, y2), (cx, cy), d = e2
+                if px1 is not None:
+                    self.blendTangent(self._isLineTanToArc(px1, py1, x1, y1,
+                                                           cx, cy, d))
+                patch = Patch.fromRevArcSeg(x1, y1, x2, y2, cx, cy, d, self)
+                self._patches.append(patch)
+            # arc -> line
+            elif le1 == 3 and le2 == 2:
+                (aex, aey), (cx, cy), d = e1
+                lex, ley = e2
+                self.blendTangent(self._isLineTanToArc(lex, ley, aex, aey, cx,
+                                                       cy, d))
+                patch = Patch.fromRevLineSeg(aex, aey, lex, ley, self)
+                self._patches.append(patch)
+                px1 = x1
+                py1 = y1
+            # arc -> arc
+            # TODO: untested, no tool defined with this geometry
+            else:
+                (x1, y1), (cx1, cy1), d1 = e1
+                (x2, y2), (cx2, cy2), d2 = e2
+                self.blendTangent(self._isArcTangentToArc(x1, y1, cx1, cy1,
+                                                          cx2, cy2))
+                patch = Patch.fromRevArcSeg(x1, y1, x2, y2, cx2, cy2, d2,
+                                            self)
+                self._patches.append(patch)
+        for i, v in enumerate(self._vertices[:-1]):
+            for vv in self._vertices[i+1:]:
+                if self.verticesEqual(vv, v):
+                    break
+            else:
+                self._sharedVertices.append(v)
+        self._bbox = BBox.fromVertices(self._sharedVertices)
+        # print 'vertices', self.vertexCount()
+        # print 'uniquevs', len(self._sharedVertices)
 

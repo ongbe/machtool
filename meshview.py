@@ -46,11 +46,26 @@ class MeshView(GLView):
                 result += vv[c] * m[c][r]
             out[r] = result
         return out[:3]
+    # TODO: The mesh's bounding box vertices are transformed by the current
+    #       model view matrix. The bounding box of those points is used to fit
+    #       the tool. This isn't as accurate as using the meshes vertices but
+    #       it is faster.
+    # def fitMesh(self):
+    #     if self.mesh is None:
+    #         return
+    #     mappedVerts = []
+    #     for boxVert in self.mesh.bbox().vertices():
+    #         v = self.mxv(self.modelviewMatrix, boxVert)
+    #         mappedVerts.append(v)
+    #     bbox = BBox.fromVertices(mappedVerts)
+    #     self.fit(QPointF(bbox.p1[0], bbox.p1[1]),
+    #              QPointF(bbox.p2[0], bbox.p2[1]))
+    #     self.updateGL()
+    # fit mesh vertices version
     def fitMesh(self):
         if self.mesh is None:
             return
         mappedVerts = []
-        # TODO: get shared vertices here, not all of them
         for meshVert in self.mesh.sharedVertices():
             v = self.mxv(self.modelviewMatrix, meshVert)
             mappedVerts.append(v)

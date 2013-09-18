@@ -67,10 +67,10 @@ Revolved Meshes
 A revolved surface of the entire tool, the cutting section, or the shank
 section may be obtained with:
  * ToolDef.mesh()
+ TODO:
  * ToolDef.cutterMesh()
  * ToolDef.shankMesh()
-These are designed to be rendered with OpenGL. They are generated each time
-their methods are called.
+They are generated each time their methods are called.
 
 Tool Validity
 =============
@@ -97,7 +97,6 @@ Temporary Progress Notes
 ========================
 P  -- profile defined
 D  -- dimensions defined
-S  -- revolved surface defined
 
 PD  BallMillDef
     BottomTapDef
