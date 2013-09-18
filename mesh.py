@@ -41,6 +41,8 @@ class Patch(object):
         self._startIndex = mesh.vertexCount()
         # If this patch is a cone, this is the apex vertex
         self._apexVertex = None
+        # indices into the parent mesh's vertex list
+        self._indices = []
     def addTri(self, a, b, c, apexVertex=None):
         """Add a triangle.
 
@@ -58,9 +60,9 @@ class Patch(object):
                              QVector3D(*b),
                              QVector3D(*c))
         n = [n.x(), n.y(), n.z()]
-        self._mesh.addVertex(a, n)
-        self._mesh.addVertex(b, n)
-        self._mesh.addVertex(c, n)
+        self._indices.append(self._mesh.addVertex(a, n, self._startIndex))
+        self._indices.append(self._mesh.addVertex(b, n, self._startIndex))
+        self._indices.append(self._mesh.addVertex(c, n, self._startIndex))
         self._nTris += 1
     def addQuad(self, a, b, c, d):
         """Add a quad.
@@ -108,7 +110,6 @@ class Patch(object):
                              [x1 * ca2, x1 * sa2, z1],
                              [x2 * ca2, x2 * sa2, z2],
                              [x2 * ca1, x2 * sa1, z2])
-        
     def addRevArcSeg(self, x1, z1, x2, z2, cx, cz, arcDir):
         a = x1 - cx
         b = z1 - cz
@@ -168,14 +169,21 @@ class Patch(object):
         """
         pass
     def render(self):
+        # for a,b,c in windowItr(self._mesh._indices, 3, 3):
+        #     print 'render'
+        #     print self._mesh._vertices[a]
+        #     print self._mesh._vertices[b]
+        #     print self._mesh._vertices[c]
+        # gl.glDisable(gl.GL_LIGHTING)
         # gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
-        # gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
-        #                 [0.2, 0.2, 0.2, 1.0])
-        # gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
-        #                 [0.2, 0.2, 0.2, 1.0])
+        gl.glShadeModel(gl.GL_SMOOTH)
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+                        [0.1, 0.1, 0.7, 1.0])
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
+                        [1.0, 1.0, 1.0, 1.0])
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SHININESS, 50)
         gl.glDrawElements(gl.GL_TRIANGLES, self._nTris * 3,
-                          gl.GL_UNSIGNED_INT,
-                          self._mesh.indices()[self._startIndex:])
+                          gl.GL_UNSIGNED_INT, self._indices)
         
 
 class Mesh(object):
@@ -184,8 +192,6 @@ class Mesh(object):
     def __init__(self):
         # Patch instances
         self._patches = []
-        # integer, indices into vertices
-        self._indices = []
         # [x, y, z], all vertices of every triangle in the mesh
         self._vertices = []
         # [i, j, k], associated normals
@@ -194,15 +200,25 @@ class Mesh(object):
         self._sharedVertices = []
         # integer, self.vertices count
         self._nVertices = 0
-        # integer, self.indices count
-        self._nIndices = 0
-    def addVertex(self, v, n):
+    def addVertex(self, v, n, startIndex):
         if v not in self._sharedVertices:
             self._sharedVertices.append(v)
+        i = self._nVertices - 1
+        while i >= startIndex:
+            if self._vertices[i] == v:
+                # vertex found
+                # sum its normal with the duplicate vertex's normal
+                nn = QVector3D(*self._normals[i])
+                nn += QVector3D(*n)
+                nn.normalize()
+                self._normals[i] = [nn.x(), nn.y(), nn.z()]
+                return i
+            i -= 1
+        # vertex not found
         self._vertices.append(v)
         self._normals.append(n)
-        self._indices.append(self._nVertices)
         self._nVertices += 1
+        return self._nVertices - 1
     def indexCount(self):
         """Return the length of self.indices (cached)
         """
@@ -222,7 +238,7 @@ class Mesh(object):
         """
         return BBox.fromVertices(self._sharedVertices)
     def render(self):
-        gl.glVertexPointer(3, gl.GL_FLOAT, 0, self._vertices);
+        gl.glVertexPointer(3, gl.GL_DOUBLE, 0, self._vertices);
         gl.glNormalPointer(gl.GL_FLOAT, 0, self._normals);
         gl.glEnableClientState(gl.GL_VERTEX_ARRAY);
         gl.glEnableClientState(gl.GL_NORMAL_ARRAY);
@@ -264,6 +280,6 @@ class RevolvedMesh(Mesh):
             else:
                 patch = Patch.fromRevLineSeg(x1, y1, x2, y2, self)
                 self._patches.append(patch)
-        # print 'vertices', self.vertexCount()
-        # print 'sharedvs', len(self._sharedVertices)
+
+
 

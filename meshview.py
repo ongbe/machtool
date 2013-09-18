@@ -62,24 +62,24 @@ class MeshView(GLView):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         if self.mesh:
             self.mesh.render()
-    def topView(self):
-        super(MeshView, self).topView(False)
+    def topView(self, update=False):
+        super(MeshView, self).topView(update)
         self.fitMesh()
-    def bottomView(self):
-        super(MeshView, self).bottomView(False)
+    def bottomView(self, update=False):
+        super(MeshView, self).bottomView(update)
         self.fitMesh()
-    def rightView(self):
-        super(MeshView, self).rightView(False)
+    def rightView(self, update=False):
+        super(MeshView, self).rightView(update)
         self.fitMesh()
-    def leftView(self):
-        super(MeshView, self).leftView(False)
+    def leftView(self, update=False):
+        super(MeshView, self).leftView(update)
         self.fitMesh()
-    def frontView(self):
-        super(MeshView, self).frontView(False)
+    def frontView(self, update=False):
+        super(MeshView, self).frontView(update)
         self.fitMesh()
-    def backView(self):
-        super(MeshView, self).backView(False)
+    def backView(self, update=False):
+        super(MeshView, self).backView(update)
         self.fitMesh()
-    def isometricView(self):
-        super(MeshView, self).isometricView(False)
+    def isometricView(self, update=False):
+        super(MeshView, self).isometricView(update)
         self.fitMesh()

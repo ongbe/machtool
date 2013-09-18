@@ -50,13 +50,11 @@ class GLView(QGLWidget):
         gl.glEnable(gl.GL_CULL_FACE)
         gl.glEnable(gl.GL_LIGHTING)
         gl.glEnable(gl.GL_LIGHT0)
-        lightPosition = [50, 50, 170]
-        gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, lightPosition)
-        # default to front view
-        gl.glMatrixMode(gl.GL_MODELVIEW)
-        gl.glLoadIdentity()
-        gl.glRotate(-90.0, 1.0, 0.0, 0.0)
-        self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, [50, 50, 170])
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_SPECULAR, [0.5, 0.5, 1.0, 1.0])
+        gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, [1.0, 1.0, 1.0, 1.0])
+        # base class defaults to front view, +X/+Z plane
+        self.frontView(False)
     def sizeHint(self):
         return QSize(500, 500)
     def minimumSizeHint(self):
