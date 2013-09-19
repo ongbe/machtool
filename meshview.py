@@ -103,7 +103,6 @@ class MeshView(GLView):
         if self.mesh is None:
             return
         bbox = self.getMeshSceneBBox()
-        print bbox
         self.fit(QPointF(bbox.left(), bbox.top()),
                  QPointF(bbox.right(), bbox.bottom()))
         self.updateGL()

@@ -662,29 +662,38 @@ class CenterDrillDef(ToolDef):
     """
     def __init__(self, specs):
         super(CenterDrillDef, self).__init__(specs)
-    @staticmethod
-    def getSortKey():
-        return 'tipDia'
+        self.oalDim = LinearDim()
+        self.oalDim.setToolTip("oal")
     def sceneChange(self, scene):
         super(CenterDrillDef, self).sceneChange(scene)
         if scene:
-            pass
+            scene.addItem(self.oalDim)
         else:
-            pass
+            self.scene().removeItem(self.oalDim)
+    def checkGeometry(self, specs={}):
+        d = copy(self.specs)
+        d.update(specs)
+        # oal too short
+        if d['oal'] <= self.minOAL:
+            return False
+        return True
+    @staticmethod
+    def getSortKey():
+        return 'tipDia'
     def _updateProfile(self):
         tipRadius = self.specs['tipDia'] / 2.0
         tipLength = self.specs['tipLength']
-        bodyRadius = self.specs['bodyDia'] / 2.0
+        brad = self.specs['bodyDia'] / 2.0
         oal = self.specs['oal']
         halfPointAngle = 118.0 / 2.0
         halfBellAngle = 30.0
         pointLength = tan(radians(90.0 - halfPointAngle)) * tipRadius
-        bellLength = tan(radians(90.0 - 30)) * (bodyRadius - tipRadius)
+        bellLength = tan(radians(90.0 - 30)) * (brad - tipRadius)
         p1 = (0, 0)
         p2 = (tipRadius, pointLength)
         p3 = (tipRadius, pointLength + tipLength)
-        p4 = (bodyRadius, pointLength + tipLength + bellLength)
-        p5 = (bodyRadius, oal)
+        p4 = (brad, pointLength + tipLength + bellLength)
+        p5 = (brad, oal)
         p6 = (0, oal)
         pp = QPainterPath()
         # # right side
@@ -698,13 +707,38 @@ class CenterDrillDef(ToolDef):
         # # left
         pp.addPath(mirTx.map(pp))
         self.setPath(pp)
-        return p1, p2, p3, p4, p5, p6, oal
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, oal):
-        # There's only a fixed number of center drill sizes AFAIK so no need
-        # for editable dimensions.
+        self.minOAL = p4[1]
+        return p1, p5, oal
+    def _updateDims(self, p1, p5, oal):
+        metric = self.specs['metric']
+        # OAL dimension
+        tr = self.oalDim.dimText.sceneBoundingRect()
+        ar = self.oalDim.arrow1.sceneBoundingRect()
+        outside = True
+        # label inside witness lines
+        labelAbove = False
+        if tr.height() * 1.1 < oal:
+            labelY = oal * 0.5
+            if tr.height() * 1.1 + ar.height() * 2.1 < oal:
+                outside = False
+        # label above witness lines
+        else:
+            labelAbove = True
+            labelY = oal + tr.height() * 1.1
+            if ar.height() * 2.1 < oal:
+                outside = False
+        labelX = p5[0] + tr.width() * .6
+        self.oalDim.config({'value': oal,
+                            'ref1': QPointF(*p1),
+                            'ref2': QPointF(*p5),
+                            'outside': outside,
+                            'format': FMTMM if metric else FMTIN,
+                            'pos': QPointF(labelX, labelY),
+                            'force': 'vertical'})
+        # comment label
         tr = self.commentText.sceneBoundingRect()
         self.commentText.config({'pos': QPointF(0, oal + tr.height() * .75),
-                               'text': self.specs['name']})
+                                 'text': self.specs['name']})
         
         
 class EndMillDef(ToolDef):

@@ -22,7 +22,7 @@ class GLView(QGLWidget):
 
     A basic xyz axis is rendered at the origin. red=X+, green=Y+, blue=Z+.
 
-    A fit method is supplied. The two [x, y, z] points define the corners of
+    A fit method is supplied. The two [x, y] points define the corners of
     the rectangle to fit. The coordinates should be relative to the default
     X/Y plane.
 
@@ -206,7 +206,7 @@ class GLView(QGLWidget):
         if update:
             self.updateGL()
     def mouseRotate(self, dx, dy):
-        """Rotate the scene the current focal point (self.rotCenter).
+        """Rotate the scene about the current focal point (self.rotCenter).
 
         dx, dy -- mouse deltas
         """
