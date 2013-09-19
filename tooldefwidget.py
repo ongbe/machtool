@@ -331,7 +331,8 @@ class ToolDefWidget(QWidget):
         mesh = RevolvedMesh(self.toolDef.profile())
         # TODO: signals/slots
         self.parent().parent().meshview.setMesh(mesh)
-        self.parent().parent().meshview.updateGL()
+        # fit it after is has been resized
+        self.parent().parent().meshview.fitMesh()
     def saveCurrentTool(self):
         result = self.toolBrowser.addTool(self.toolDef)
         if result:

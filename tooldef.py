@@ -62,16 +62,6 @@ shank at the top.
   (0.5, 3.0),
   (0.0, 3.0)]
 
-Revolved Meshes
-===============
-A revolved surface of the entire tool, the cutting section, or the shank
-section may be obtained with:
- * ToolDef.mesh()
- TODO:
- * ToolDef.cutterMesh()
- * ToolDef.shankMesh()
-They are generated each time their methods are called.
-
 Tool Validity
 =============
 Each tool must have the following two methods:
@@ -374,12 +364,6 @@ class ToolDef(QGraphicsPathItem):
             labelYfactor = 3.0
         labelP = QPointF(0, y + boxHeight * labelYfactor)
         self.commentText.config({'pos': labelP, 'text': self.specs['name']})
-    def mesh(self):
-        raise NotImplementedError()
-    def cutterMesh(self):
-        raise NotImplementedError()
-    def shankMesh(self):
-        raise NotImplementedError()
 
 class DrillDef(ToolDef):
     """Define a basic drill shape.

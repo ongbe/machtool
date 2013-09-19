@@ -21,6 +21,33 @@ class MeshView(GLView):
     def __init__(self, parent):
         super(MeshView, self).__init__(parent)
         self.mesh = None
+        # copy of GLView.rotFactor
+        self.baseRotFactor = self.rotFactor
+    def wheelEvent(self, e):
+        """Zoom in/out and adjust the mouse rotation factor.
+        """
+        super(MeshView, self).wheelEvent(e)
+        self._setRotFactor()
+    # TODO: Works well but is probably going to need some tweaking
+    def _setRotFactor(self):
+        """Adjust the mouse rotation factor.
+
+        The factor is computed based on how much of the mesh is visible and
+        how deep into the scene it extends.
+        """
+        if self.mesh:
+            bbox = self.getMeshSceneBBox()
+            w, h, d = bbox.size()
+            # mesh is fully in view
+            if self.sceneHeight >= h and self.sceneWidth > w:
+                if d > w+h:
+                    self.rotFactor = self.baseRotFactor * ((w+h) / d)
+                else:
+                    self.rotFactor = self.baseRotFactor
+            # partially in view
+            else:
+                self.rotFactor = \
+                    self.baseRotFactor * self.sceneHeight / max(w, h) * 0.5
     def setMesh(self, mesh):
         self.mesh = mesh
         self.setRotCenter(mesh.bbox().center())
@@ -62,17 +89,25 @@ class MeshView(GLView):
     #              QPointF(bbox.p2[0], bbox.p2[1]))
     #     self.updateGL()
     # fit mesh vertices version
-    def fitMesh(self):
-        if self.mesh is None:
-            return
+    def getMeshSceneBBox(self):
+        """Get the view-aligned bbox of the mesh at its current orientation.
+
+        Return a BBox.
+        """
         mappedVerts = []
         for meshVert in self.mesh.sharedVertices():
             v = self.mxv(self.modelviewMatrix, meshVert)
             mappedVerts.append(v)
-        bbox = BBox.fromVertices(mappedVerts)
-        self.fit(QPointF(bbox.p1[0], bbox.p1[1]),
-                 QPointF(bbox.p2[0], bbox.p2[1]))
+        return BBox.fromVertices(mappedVerts)
+    def fitMesh(self):
+        if self.mesh is None:
+            return
+        bbox = self.getMeshSceneBBox()
+        print bbox
+        self.fit(QPointF(bbox.left(), bbox.top()),
+                 QPointF(bbox.right(), bbox.bottom()))
         self.updateGL()
+        self._setRotFactor()
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         if self.mesh:
@@ -98,3 +133,7 @@ class MeshView(GLView):
     def isometricView(self, update=False):
         super(MeshView, self).isometricView(update)
         self.fitMesh()
+    def keyPressEvent(self, e):
+        if e.key() == qt.Key_F:
+            self.fitMesh()
+        super(MeshView, self).keyPressEvent(e)

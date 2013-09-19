@@ -6,6 +6,8 @@
 Saturday, September 14 2013
 """
 
+from math import sqrt
+
 from PyQt4.QtGui import *
 from PyQt4.QtCore import *
 from PyQt4.QtCore import Qt as qt
@@ -15,7 +17,33 @@ import OpenGL.GLU as glu
 
 class GLView(QGLWidget):
     """An OpenGL viewer with pan/rotate/zoom + fixed orientation views.
+
+    A single light is provided at the fixed point (50, 50, 170).
+
+    A basic xyz axis is rendered at the origin. red=X+, green=Y+, blue=Z+.
+
+    A fit method is supplied. The two [x, y, z] points define the corners of
+    the rectangle to fit. The coordinates should be relative to the default
+    X/Y plane.
+
+    Default Behavior
+    ================
+    * Initial view orientation is the default OpenGL X/Y plane. This is the
+      'top' view.
+    * Mouse wheel zooms in (with shift) and out (with no shift).
+    * Left button rotates the scene about rotCenter.
+    * Middle button pans the scene.
+    * Arrows rotate the scene about the vertical and horizontal axes.
+      GLView.arrowRotationStep defaults to 15 degrees.
+    * Visible scene is 10x10 units with the origin at the center.
+
+    Default Context Menu
+    ====================
+    * Top, Bottom, Left, Right, Front, Back, and Isometric views can be
+      selected.
     """
+    # up, down, left, right arrow key rotation amount
+    arrowRotationStep = 15.0
     def __init__(self, parent):
         super(GLView, self).__init__(parent)
         self.rotCenter = [0.0, 0.0, 0.0]
@@ -24,8 +52,8 @@ class GLView(QGLWidget):
                                 [0.0, 0.0, 1.0, 0.0],
                                 [0.0, 0.0, 0.0, 1.0]]
         self.sceneCenter = [0.0, 0.0]
-        self.sceneWidth = 5.0
-        self.sceneHeight = 5.0
+        self.sceneWidth = 10.0
+        self.sceneHeight = 10.0
         self.aspect = 1.0
         self.rotFactor = 0.75
         self.lastMousePos = QPoint()
@@ -59,7 +87,7 @@ class GLView(QGLWidget):
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_SPECULAR, [0.3, 0.3, 1.0, 0.5])
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, [1.0, 1.0, 1.0, 1.0])
         # base class defaults to front view, +X/+Z plane
-        self.frontView(False)
+        self.topView(False)
     def sizeHint(self):
         return QSize(500, 500)
     def minimumSizeHint(self):
@@ -166,10 +194,10 @@ class GLView(QGLWidget):
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         if update:
             self.updateGL()
+    # TODO: Not sure if this is 100% accurate, but it's close enough.
     def isometricView(self, update=True):
         """Rotate to an isometric view.
 
-        Not sure if this is 100% accurate, but it's close enough.
         """
         gl.glLoadIdentity()
         gl.glRotate(-60.0, 1.0, 0.0, 0.0)
@@ -177,12 +205,22 @@ class GLView(QGLWidget):
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         if update:
             self.updateGL()
-    def rotate(self, dx, dy):
-        """Rotate about the current focal point (self.rotCenter).
+    def mouseRotate(self, dx, dy):
+        """Rotate the scene the current focal point (self.rotCenter).
 
         dx, dy -- mouse deltas
         """
-        axis = QVector3D(dy, dx, 0)   # dx/dy backwards!
+        self.rotateScene([dy, dx, 0],
+                         self.rotFactor * sqrt(dx*dx + dy*dy))
+    def rotateScene(self, axis, angle):
+        """Apply the scene-relative rotation to the model view matrix.
+
+        axis -- [i, j, k], doesn't have to be normalized
+        angle -- signed degrees
+
+        Y+ is up, X+ is right
+        """
+        axis = QVector3D(*axis)
         axisN = axis.normalized()
         # find the rotation center point @ the current rotation
         gl.glPushMatrix()
@@ -192,11 +230,11 @@ class GLView(QGLWidget):
         gl.glLoadIdentity()
         # now shift/rotate/unshift and mulitiply
         gl.glTranslatef(m[3][0], m[3][1], m[3][2])
-        gl.glRotate(self.rotFactor * axis.length(),
-                     axisN.x(), axisN.y(), axisN.z())
+        gl.glRotate(angle, axisN.x(), axisN.y(), axisN.z())
         gl.glTranslatef(-m[3][0], -m[3][1], -m[3][2])
         gl.glMultMatrixf(self.modelviewMatrix)
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
+        self.updateGL()
     def pan(self, dx, dy):
         """Shift the scene origin by dx/dy pixels
         """
@@ -204,10 +242,11 @@ class GLView(QGLWidget):
         self.sceneCenter[0] -= pw * dx
         self.sceneCenter[1] += ph * dy
         self.ortho()
-    def fit(self, p1, p2):
+    def fit(self, p1, p2, pad=True):
         """Fit the rectangle define by the two points into the scene.
 
         p1, p2 -- rectangle opposite sides
+        pad -- if True, include a small outside margin
         """
         x1 = p1.x()
         y1 = p1.y()
@@ -222,20 +261,24 @@ class GLView(QGLWidget):
             self.sceneHeight = w / self.aspect
         else:
             self.sceneHeight = h
-        self.sceneHeight *= 1.02 # just a little padding
+        if pad:
+            self.sceneHeight *= 1.02 # just a little padding
         self.ortho()
     def mouseMoveEvent(self, e):
         """Left button rotate, middle button pan
         """
         if e.buttons() & qt.LeftButton:
             delta = e.pos() - self.lastMousePos
-            self.rotate(delta.x(), delta.y())
+            self.mouseRotate(delta.x(), delta.y())
             self.updateGL()
         if e.buttons() & qt.MiddleButton:
             delta = e.pos() - self.lastMousePos
             self.pan(delta.x(), delta.y())
             self.updateGL()
         self.lastMousePos = e.pos()
+    def mousePressEvent(self, e):
+        super(QGLWidget, self).mousePressEvent(e)
+        self.setFocus()
     def wheelEvent(self, e):
         """Zoom in/out.
 
@@ -243,8 +286,6 @@ class GLView(QGLWidget):
         of the scene.
         """
         if e.delta() > 0:
-            # zoom in and shift what's under the mouse towards the center of
-            # the screen
             w = self.width()
             h = self.height()
             d = e.pos() - QPoint(w / 2, h / 2)
@@ -259,7 +300,6 @@ class GLView(QGLWidget):
             self.sceneCenter = [cx + dx * self.sceneWidth,
                                 cy + dy * self.sceneHeight]
         else:
-            # zoom out with no shift
             sw = self.sceneHeight * 1.2
             if sw > self.maxZoom:
                 return
@@ -267,3 +307,19 @@ class GLView(QGLWidget):
             self.sceneHeight *= 1.2
         self.ortho()
         self.updateGL()
+    def keyPressEvent(self, e):
+        """Handle key press events
+
+        GLView handles the arrow keys and nothing else. They rotate the scene
+        about the vertical or horizontal axes.
+        """
+        # OpenGL defaults to Y+ up, so (0, 1, 0) is the vertical axis
+        if e.key() == qt.Key_Left:
+            self.rotateScene([0, 1, 0], -self.arrowRotationStep)
+        elif e.key() == qt.Key_Right:
+            self.rotateScene([0, 1, 0], self.arrowRotationStep)
+        elif e.key() == qt.Key_Up:
+            self.rotateScene([1, 0, 0], -self.arrowRotationStep)
+        elif e.key() == qt.Key_Down:
+            self.rotateScene([1, 0, 0], self.arrowRotationStep)
+        super(GLView, self).keyPressEvent(e)

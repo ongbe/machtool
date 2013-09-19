@@ -43,6 +43,8 @@ class Patch(object):
         # indices into the parent mesh's vertex list
         self._indices = []
     def startIndex(self):
+        """Return this patch's offset into its parent mesh's vertices.
+        """
         return self._startIndex
     def addTri(self, a, b, c, apexVertex=None):
         """Add a triangle.
@@ -83,6 +85,15 @@ class Patch(object):
         self.addTri(a, b, c)
         self.addTri(a, c, d)
     def addRevLineSeg(self, x1, z1, x2, z2):
+        """Add a 360 degree revolved line to this Patch.
+
+        x1, z1 -- start point
+        x2, z2 -- end point
+
+        It is assumed the points are in the XZ plane and the axis of
+        revolution is parallel to the vector (0, 0, 1), and passes through the
+        point (0, 0, 0).
+        """
         # tip triangles
         if x1 == 0.0:
             a = [float(x1), 0.0, float(z1)]
@@ -110,6 +121,17 @@ class Patch(object):
                              [x2 * ca2, x2 * sa2, z2],
                              [x2 * ca1, x2 * sa1, z2])
     def addRevArcSeg(self, x1, z1, x2, z2, cx, cz, arcDir):
+        """Add a 360 degree revolved arc to this Patch.
+
+        x1, z1 -- start vertex
+        x2, z2 -- end vertex
+        cx, cz -- center point
+        arcDir -- 'cclw' or 'clw'
+
+        It is assumes the points are in the XZ plane and the axis of
+        revolution is paralles to the vector (0, 0, 1), and passes through the
+        point (0, 0, 0).
+        """
         a = x1 - cx
         b = z1 - cz
         r = sqrt(a*a + b*b)
@@ -137,6 +159,9 @@ class Patch(object):
             a1 = a2
             sa1 = sa2
             ca1 = ca2
+            if i == 1:
+                # only blend the first strip
+                self._mesh.blendTangent(False)
         else:
             a2 = radians(arc.endAngle())
             x1 = cx + r * ca1
@@ -171,17 +196,9 @@ class Patch(object):
         patch = Patch(mesh)
         patch.addRevArcSeg(x1, z1, x2, z2, cx, cz, arcDir)
         return patch
-    def calcNormals(self):
-        """Recalculate all normals to produce smooth shading.
-        """
-        pass
     def render(self):
-        # for a,b,c in windowItr(self._mesh._indices, 3, 3):
-        #     print 'render'
-        #     print self._mesh._vertices[a]
-        #     print self._mesh._vertices[b]
-        #     print self._mesh._vertices[c]
-        # gl.glEnable(gl.GL_LINE_SMOOTH)
+        """Render this Patch.
+        """
         # gl.glDisable(gl.GL_LIGHTING)
         # gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
         gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
@@ -212,11 +229,22 @@ class Mesh(object):
         # vertice bounding box
         self._bbox = None
     def blendTangent(self, blend):
+        """Search the previous Patch's vertices when adding a vertex.
+        
+        blend -- bool
+
+        This will create the correct normals between tangent patches.
+        """
         if blend and self._patches:
             self._prevStartIndex = self._patches[-1].startIndex()
         else:
             self._prevStartIndex = 1e10
     def verticesEqual(self, v1, v2, eps=1e-8):
+        """Return True if the vertices are equal.
+
+        v1, v2 -- [x, y, z]
+        eps -- allowed difference
+        """
         if abs(v1[0] - v2[0]) > eps:
             return False
         if abs(v1[1] - v2[1]) > eps:
@@ -235,6 +263,11 @@ class Mesh(object):
                 normal (n) will have been pre-calculated. v and n will be
                 appended without any further checks or normal sums.
         """
+        for vv in self._sharedVertices[-1::-1]:
+            if self.verticesEqual(v, vv):
+                break
+        else:
+            self._sharedVertices.append(v)
         if not apex:
             startIndex = min(startIndex, self._prevStartIndex)
             i = self._nVertices - 1
@@ -261,6 +294,8 @@ class Mesh(object):
         """
         return self._nVertices
     def sharedVertices(self):
+        """Return the list of unique vertices in this mesh.
+        """
         return self._sharedVertices
     def bbox(self):
         """Find the coordinate-aligned bounding box of this meshes vertices.
@@ -268,8 +303,9 @@ class Mesh(object):
         Return a BBox instance.
         """
         return self._bbox
-        return BBox.fromVertices(self._sharedVertices)
     def render(self):
+        """Render all the patches.
+        """
         gl.glVertexPointer(3, gl.GL_DOUBLE, 0, self._vertices);
         gl.glNormalPointer(gl.GL_FLOAT, 0, self._normals);
         gl.glEnableClientState(gl.GL_VERTEX_ARRAY);
@@ -303,7 +339,9 @@ def getSinCosCache(nSegs):
         
 
 class RevolvedMesh(Mesh):
-    segs = 36
+    """A 360 degree surface of revolution.
+    """
+    segs = 32
     sincos = getSinCosCache(segs)
     def __init__(self, profile):
         super(RevolvedMesh, self).__init__()
@@ -351,6 +389,10 @@ class RevolvedMesh(Mesh):
         else:
             return False
     def _build(self, profile):
+        """Create each Patch defined by the profile.
+
+        profile -- a list of tuples as defined in tooldef.py
+        """
         # previous line start x/y, for line -> arc
         px1 = py1 = None
         for e1, e2 in windowItr(profile, 2, 1):
@@ -396,11 +438,5 @@ class RevolvedMesh(Mesh):
                 patch = Patch.fromRevArcSeg(x1, y1, x2, y2, cx2, cy2, d2,
                                             self)
                 self._patches.append(patch)
-        for i, v in enumerate(self._vertices[:-1]):
-            for vv in self._vertices[i+1:]:
-                if self.verticesEqual(vv, v):
-                    break
-            else:
-                self._sharedVertices.append(v)
         self._bbox = BBox.fromVertices(self._sharedVertices)
 
