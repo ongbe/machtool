@@ -17,7 +17,6 @@ from PyQt4.QtCore import Qt as qt
 from tooldefscene import ToolDefScene
 from tooldefview import ToolDefView
 from tooldef import *
-from mesh import RevolvedMesh
 
 # ToolDef class to tool category
 TDEF2CAT = {DrillDef: 'Twist Drill',
@@ -128,8 +127,8 @@ class ToolBrowserView(QTreeWidget):
                 item = TreeToolItem(catItem, [m['name']], 3000)
                 sortVal = m[CAT2TDEF[k].getSortKey()]
                 # convert metric to inch for tree sorting
-                item.setSortData(0, sortVal / 25.4
-                                 if m['metric'] else sortVal)
+                item.setSortData(0,
+                                 sortVal / 25.4 if m['metric'] else sortVal)
             self.addTopLevelItem(catItem)
         self.dirty = False
     def writeToolLib(self, fileName=None):
@@ -143,7 +142,7 @@ class ToolBrowserView(QTreeWidget):
         self.dirty = False
     def keyPressEvent(self, e):
         if e.key() == qt.Key_Escape:
-            self.parent().showToolDefView()
+            self.emit(SIGNAL('escKeyPressed()'))
         super(ToolBrowserView, self).keyPressEvent(e)
     def addTool(self, toolDef):
         # first see if we're going to modify an existing tool
@@ -243,9 +242,12 @@ class ToolDefWidget(QWidget):
         self.connect(self.toolBrowser,
                      SIGNAL('itemClicked(QTreeWidgetItem*, int)'),
                      self.loadTool)
+        self.connect(self.toolBrowser,
+                     SIGNAL('escKeyPressed()'),
+                     self.showToolDefView)
         self.showToolBrowserView()
     def loadTool(self, item):
-        """Load a tool into the ToolDefView.
+        """Load a tool into ToolDefView.
 
         item -- a QTreeWidgetItem
         
@@ -260,10 +262,7 @@ class ToolDefWidget(QWidget):
         self.tdefScene.addItem(self.toolDef)
         self.toolDef.config(specs)
         self.showToolDefView()
-        mesh = RevolvedMesh(self.toolDef.profile())
-        # TODO: signals/slots
-        self.parent().parent().meshview.setMesh(mesh)
-        self.parent().parent().meshview.frontView()
+        self.emit(SIGNAL('toolLoaded()'))
     def showToolBrowserView(self):
         """Replace the ToolDefView with the ToolBrowserView
         
@@ -328,11 +327,7 @@ class ToolDefWidget(QWidget):
         self.tdefView.setFocus()
         self.tdefView.fitAll()
         self.saveToolButton.setEnabled(self.toolDef.isDirty())
-        mesh = RevolvedMesh(self.toolDef.profile())
-        # TODO: signals/slots
-        self.parent().parent().meshview.setMesh(mesh)
-        # fit it after is has been resized
-        self.parent().parent().meshview.fitMesh()
+        self.emit(SIGNAL('toolModified()'))
     def saveCurrentTool(self):
         result = self.toolBrowser.addTool(self.toolDef)
         if result:

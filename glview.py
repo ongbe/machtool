@@ -51,7 +51,7 @@ class GLView(QGLWidget):
                                 [0.0, 1.0, 0.0, 0.0],
                                 [0.0, 0.0, 1.0, 0.0],
                                 [0.0, 0.0, 0.0, 1.0]]
-        self.sceneCenter = [0.0, 0.0]
+        self.sceneCenter = (0.0, 0.0)
         self.sceneWidth = 10.0
         self.sceneHeight = 10.0
         self.aspect = 1.0
@@ -62,7 +62,7 @@ class GLView(QGLWidget):
         self.setMouseTracking(True)
         self.createContextMenu()
     def setRotCenter(self, p):
-        self.rotCenter = p
+        self.rotCenter = tuple(p)
     # TODO: too lazy
     def createContextMenu(self):
         self.setContextMenuPolicy(qt.ActionsContextMenu)
@@ -103,11 +103,11 @@ class GLView(QGLWidget):
     def screenToScene(self, x, y):
         """Find the scene coordinates of the pixel
 
-        Return [x, y]
+        Return (x, y)
         """
         pw, ph = self.pixelSize(gl.glGetFloat(gl.GL_PROJECTION_MATRIX))
-        return [self.sceneCenter[0] - (self.sceneWidth * 0.5) + pw * x,
-                self.sceneCenter[1] - (self.sceneHeight * 0.5) + ph * y]
+        return (self.sceneCenter[0] - (self.sceneWidth * 0.5) + pw * x,
+                self.sceneCenter[1] - (self.sceneHeight * 0.5) + ph * y)
     def ortho(self):
         """Set up the scene's bounds
         """
@@ -127,7 +127,6 @@ class GLView(QGLWidget):
         self.aspect = float(w) / h
         gl.glViewport(0, 0, w, h)
         self.ortho()
-        self.updateGL()
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         axisLen = 2.0
@@ -234,7 +233,7 @@ class GLView(QGLWidget):
         gl.glTranslatef(-m[3][0], -m[3][1], -m[3][2])
         gl.glMultMatrixf(self.modelviewMatrix)
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
-        self.updateGL()
+        # self.updateGL()
     def pan(self, dx, dy):
         """Shift the scene origin by dx/dy pixels
         """
@@ -242,6 +241,7 @@ class GLView(QGLWidget):
         self.sceneCenter[0] -= pw * dx
         self.sceneCenter[1] += ph * dy
         self.ortho()
+        self.updateGL()
     def fit(self, p1, p2, pad=True):
         """Fit the rectangle define by the two points into the scene.
 
@@ -264,6 +264,7 @@ class GLView(QGLWidget):
         if pad:
             self.sceneHeight *= 1.02 # just a little padding
         self.ortho()
+        self.updateGL()
     def mouseMoveEvent(self, e):
         """Left button rotate, middle button pan
         """
@@ -316,10 +317,14 @@ class GLView(QGLWidget):
         # OpenGL defaults to Y+ up, so (0, 1, 0) is the vertical axis
         if e.key() == qt.Key_Left:
             self.rotateScene([0, 1, 0], -self.arrowRotationStep)
+            self.updateGL()
         elif e.key() == qt.Key_Right:
             self.rotateScene([0, 1, 0], self.arrowRotationStep)
+            self.updateGL()
         elif e.key() == qt.Key_Up:
             self.rotateScene([1, 0, 0], -self.arrowRotationStep)
+            self.updateGL()
         elif e.key() == qt.Key_Down:
             self.rotateScene([1, 0, 0], self.arrowRotationStep)
+            self.updateGL()
         super(GLView, self).keyPressEvent(e)

@@ -52,10 +52,13 @@ class MeshView(GLView):
         self.mesh = mesh
         self.setRotCenter(mesh.bbox().center())
     def createContextMenu(self):
-        super(MeshView, self).createContextMenu()
         a = QAction("Fit", self)
         self.connect(a, SIGNAL('triggered()'), self.fitMesh)
         self.addAction(a)
+        sep = QAction(self)
+        sep.setSeparator(True)
+        self.addAction(sep)
+        super(MeshView, self).createContextMenu()
     # TODO: This works but QMatrix4x4 * v does not.
     def mxv(self, m, v):
         """Multiply matrix and vector.
@@ -103,9 +106,9 @@ class MeshView(GLView):
         if self.mesh is None:
             return
         bbox = self.getMeshSceneBBox()
+        # fit calls updateGL()
         self.fit(QPointF(bbox.left(), bbox.top()),
                  QPointF(bbox.right(), bbox.bottom()))
-        self.updateGL()
         self._setRotFactor()
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)

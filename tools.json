@@ -79,35 +79,45 @@
    "oal": 2.5, 
    "angle": 90.0, 
    "name": "1/8 SPOT DRILL", 
-   "dia": 0.125
-  }, 
+   "dia": 0.125,
+   "shankDia": 0.125,
+   "fluteLength": 0.375
+  },
   {
    "metric": false, 
    "oal": 2.5, 
    "angle": 90.0, 
    "name": "1/4 SPOT DRILL", 
-   "dia": 0.25
+   "dia": 0.25,
+   "shankDia": 0.25,
+   "fluteLength": 0.5
   }, 
   {
    "metric": false, 
    "oal": 3.125, 
    "angle": 90.0, 
    "name": "3/8 SPOT DRILL", 
-   "dia": 0.375
+   "dia": 0.375,
+   "shankDia": 0.375,
+   "fluteLength": 0.75
   }, 
   {
    "metric": false, 
    "oal": 3.75, 
    "angle": 90.0, 
    "name": "1/2 SPOT DRILL", 
-   "dia": 0.5
+   "dia": 0.5,
+   "shankDia": 0.5,
+   "fluteLength": 1.0
   }, 
   {
    "metric": true, 
    "oal": 115.0, 
    "angle": 90.0, 
    "name": "14MM SPOT DRILL", 
-   "dia": 14.0
+   "dia": 14.0,
+   "shankDia": 14.0,
+   "fluteLength": 20.0
   }
  ], 
  "Woodruff Keyseat Cutter": [

@@ -100,7 +100,7 @@ class CommentValidator(Validator):
 
 
 class EditBox(QLineEdit):
-    """A QLineEdit for modifying tool dimensions and comment text
+    """A QLineEdit for modifying tool dimensions and comment text.
     """
     validSS = 'QLineEdit { background-color: #aaffaa; color: #000000;' \
         ' selection-color: #000000; selection-background-color: #00ff00; }'

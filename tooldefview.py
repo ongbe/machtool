@@ -14,8 +14,6 @@ from dimedit import DimEdit, CommentEdit
 from dimension import DimLabel
 from tooldef import ToolDef, CommentLabel
 
-from mesh import RevolvedMesh
-
 
 class ToolDefView(QGraphicsView):
     def __init__(self, scene, parent=None):

@@ -40,11 +40,11 @@ class BBox(object):
             raise BBoxException('invalid y len {}'.format(_p2[1] - _p1[1]))
         if p1[2] >= p2[2]:
             raise BBoxException('invalid z len {}'.format(_p2[2] - _p1[2]))
-        self._p1 = p1
-        self._p2 = p2
-        self._center = [(p1[0] + p2[0]) * 0.5,
+        self._p1 = tuple(p1)
+        self._p2 = tuple(p2)
+        self._center = ((p1[0] + p2[0]) * 0.5,
                         (p1[1] + p2[1]) * 0.5,
-                        (p1[2] + p2[2]) * 0.5]
+                        (p1[2] + p2[2]) * 0.5)
     def p1(self):
         return self._p1
     def p2(self):
@@ -52,7 +52,7 @@ class BBox(object):
     def center(self):
         """Return the center coordinate of this bounding box.
 
-        [x, y, z]
+        (x, y, z)
         """
         return self._center
     def __str__(self):
@@ -125,12 +125,12 @@ class BBox(object):
         bottom = self.bottom()
         front = self.front()
         back = self.back()
-        return [[left, front, bottom],
-                [right, front, bottom],
-                [right, front, top],
-                [left, front, top],
-                [left, back, bottom],
-                [right, back, bottom],
-                [right, back, top],
-                [left, back, top]]
+        return ((left, front, bottom),
+                (right, front, bottom),
+                (right, front, top),
+                (left, front, top),
+                (left, back, bottom),
+                (right, back, bottom),
+                (right, back, top),
+                (left, back, top))
                 

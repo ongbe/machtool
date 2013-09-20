@@ -42,6 +42,9 @@ class Patch(object):
         self._startIndex = mesh.vertexCount()
         # indices into the parent mesh's vertex list
         self._indices = []
+        self.setColor()
+    def setColor(self, color=[0.1, 0.1, 0.7, 1.0]):
+        self._color = color
     def startIndex(self):
         """Return this patch's offset into its parent mesh's vertices.
         """
@@ -202,7 +205,7 @@ class Patch(object):
         # gl.glDisable(gl.GL_LIGHTING)
         # gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
         gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
-                        [0.1, 0.1, 0.7, 1.0])
+                        self._color)
         gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
                         [0.3, 0.3, 1.0, 1.0])
         gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SHININESS, 64)
@@ -343,9 +346,10 @@ class RevolvedMesh(Mesh):
     """
     segs = 32
     sincos = getSinCosCache(segs)
-    def __init__(self, profile):
+    def __init__(self, profile=None):
         super(RevolvedMesh, self).__init__()
-        self._build(profile)
+        if profile:
+            self.addProfile(profile)
     def _isLineTanToArc(self, x1, y1, x2, y2, cx, cy, d):
         """Find if the line is tangent to the arc.
 
@@ -388,10 +392,11 @@ class RevolvedMesh(Mesh):
             return True
         else:
             return False
-    def _build(self, profile):
+    def addProfile(self, profile, color=None):
         """Create each Patch defined by the profile.
 
         profile -- a list of tuples as defined in tooldef.py
+        color -- [r, g, b, a]
         """
         # previous line start x/y, for line -> arc
         px1 = py1 = None
@@ -406,6 +411,8 @@ class RevolvedMesh(Mesh):
                 x2, y2 = e2
                 self.blendTangent(False)
                 patch = Patch.fromRevLineSeg(x1, y1, x2, y2, self)
+                if color:
+                    patch.setColor(color)
                 self._patches.append(patch)
                 px1 = x1
                 py1 = y1
@@ -417,6 +424,8 @@ class RevolvedMesh(Mesh):
                     self.blendTangent(self._isLineTanToArc(px1, py1, x1, y1,
                                                            cx, cy, d))
                 patch = Patch.fromRevArcSeg(x1, y1, x2, y2, cx, cy, d, self)
+                if color:
+                    patch.setColor(color)
                 self._patches.append(patch)
             # arc -> line
             elif le1 == 3 and le2 == 2:
@@ -425,6 +434,8 @@ class RevolvedMesh(Mesh):
                 self.blendTangent(self._isLineTanToArc(lex, ley, aex, aey, cx,
                                                        cy, d))
                 patch = Patch.fromRevLineSeg(aex, aey, lex, ley, self)
+                if color:
+                    patch.setColor(color)
                 self._patches.append(patch)
                 px1 = x1
                 py1 = y1
@@ -437,6 +448,8 @@ class RevolvedMesh(Mesh):
                                                           cx2, cy2))
                 patch = Patch.fromRevArcSeg(x1, y1, x2, y2, cx2, cy2, d2,
                                             self)
+                if color:
+                    patch.setColor(color)
                 self._patches.append(patch)
         self._bbox = BBox.fromVertices(self._sharedVertices)
 

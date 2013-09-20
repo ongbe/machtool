@@ -17,7 +17,7 @@ from PyQt4.QtGui import QVector2D
 
 class ArcException(Exception): pass
 
-class Arc():
+class Arc(object):
     """Define a 2D arc in the right-handed cartesian plane.
 
     The internal map is defined as follows:

@@ -12,6 +12,7 @@ from PyQt4.QtCore import *
 from PyQt4.QtCore import Qt as qt
 from tooldefwidget import ToolDefWidget
 from meshview import MeshView
+from mesh import RevolvedMesh
 
 
 class MainWindow(QMainWindow):
@@ -25,6 +26,34 @@ class MainWindow(QMainWindow):
         self.tdefWidget = ToolDefWidget()
         self.toolDefDock.setWidget(self.tdefWidget)
         self.addDockWidget(qt.RightDockWidgetArea, self.toolDefDock)
+        # TODO: A little better but noticeable lag. Also need to figure out
+        #       how to pass the ToolDef as a param.
+        self.connect(self.tdefWidget, SIGNAL('toolModified()'),
+                     self.toolModified)
+        self.connect(self.tdefWidget, SIGNAL('toolLoaded()'),
+                     self.toolLoaded)
+    def toolModified(self):
+        """The user changed a dimension on the current tool.
+        """
+        tdef = self.tdefWidget.toolDef
+        sprof = tdef.shankProfile()
+        cprof = tdef.cutterProfile()
+        mesh = RevolvedMesh()
+        mesh.addProfile(cprof)
+        mesh.addProfile(sprof, (0.5, 0.5, 0.5, 1.0))
+        self.meshview.setMesh(mesh)
+        self.meshview.fitMesh()
+    def toolLoaded(self):
+        """The user loaded a tool.
+        """
+        tdef = self.tdefWidget.toolDef
+        sprof = tdef.shankProfile()
+        cprof = tdef.cutterProfile()
+        mesh = RevolvedMesh()
+        mesh.addProfile(cprof)
+        mesh.addProfile(sprof, (0.5, 0.5, 0.5, 1.0))
+        self.meshview.setMesh(mesh)
+        self.meshview.frontView()
     def closeEvent(self, e):
         toolBrowser = self.tdefWidget.toolBrowser
         if toolBrowser.isDirty():
@@ -41,7 +70,3 @@ if __name__ == '__main__':
     # tdw = ToolDefWidget()
     # tdw.show()
     app.exec_()
-    
-    
-    
-    
