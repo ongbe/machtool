@@ -20,7 +20,7 @@ class MeshView(GLView):
     """
     def __init__(self, parent):
         super(MeshView, self).__init__(parent)
-        self.mesh = None
+        self._mesh = None
         # copy of GLView.rotFactor
         self.baseRotFactor = self.rotFactor
     def wheelEvent(self, e):
@@ -28,28 +28,32 @@ class MeshView(GLView):
         """
         super(MeshView, self).wheelEvent(e)
         self._setRotFactor()
-    # TODO: Works well but is probably going to need some tweaking
+    # TODO:
+    #  * Works well but is probably going to need some tweaking.
+    #    * added rotFactor lower bound of 0.05
     def _setRotFactor(self):
         """Adjust the mouse rotation factor.
 
         The factor is computed based on how much of the mesh is visible and
         how deep into the scene it extends.
         """
-        if self.mesh:
+        if self._mesh:
             bbox = self.getMeshSceneBBox()
             w, h, d = bbox.size()
             # mesh is fully in view
             if self.sceneHeight >= h and self.sceneWidth > w:
                 if d > w+h:
-                    self.rotFactor = self.baseRotFactor * ((w+h) / d)
+                    self.rotFactor = max(self.baseRotFactor * ((w+h) / d),
+                                         0.05)
                 else:
                     self.rotFactor = self.baseRotFactor
             # partially in view
             else:
-                self.rotFactor = \
-                    self.baseRotFactor * self.sceneHeight / max(w, h) * 0.5
+                self.rotFactor = max(self.baseRotFactor
+                                     * self.sceneHeight / max(w, h) * 0.5,
+                                     0.05)
     def setMesh(self, mesh):
-        self.mesh = mesh
+        self._mesh = mesh
         self.setRotCenter(mesh.bbox().center())
     def createContextMenu(self):
         a = QAction("Fit", self)
@@ -59,6 +63,10 @@ class MeshView(GLView):
         sep.setSeparator(True)
         self.addAction(sep)
         super(MeshView, self).createContextMenu()
+        # remove redundant fixed views
+        for a in [x for x in self.actions()
+                  if x.text() in ['Left', 'Right', 'Back']]:
+            self.removeAction(a)
     # TODO: This works but QMatrix4x4 * v does not.
     def mxv(self, m, v):
         """Multiply matrix and vector.
@@ -81,10 +89,10 @@ class MeshView(GLView):
     #       the tool. This isn't as accurate as using the meshes vertices but
     #       it is faster.
     # def fitMesh(self):
-    #     if self.mesh is None:
+    #     if self._mesh is None:
     #         return
     #     mappedVerts = []
-    #     for boxVert in self.mesh.bbox().vertices():
+    #     for boxVert in self._mesh.bbox().vertices():
     #         v = self.mxv(self.modelviewMatrix, boxVert)
     #         mappedVerts.append(v)
     #     bbox = BBox.fromVertices(mappedVerts)
@@ -98,12 +106,12 @@ class MeshView(GLView):
         Return a BBox.
         """
         mappedVerts = []
-        for meshVert in self.mesh.sharedVertices():
+        for meshVert in self._mesh.sharedVertices():
             v = self.mxv(self.modelviewMatrix, meshVert)
             mappedVerts.append(v)
         return BBox.fromVertices(mappedVerts)
     def fitMesh(self):
-        if self.mesh is None:
+        if self._mesh is None:
             return
         bbox = self.getMeshSceneBBox()
         # fit calls updateGL()
@@ -112,8 +120,8 @@ class MeshView(GLView):
         self._setRotFactor()
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-        if self.mesh:
-            self.mesh.render()
+        if self._mesh:
+            self._mesh.render()
     def topView(self, update=False):
         super(MeshView, self).topView(update)
         self.fitMesh()
@@ -138,4 +146,17 @@ class MeshView(GLView):
     def keyPressEvent(self, e):
         if e.key() == qt.Key_F:
             self.fitMesh()
-        super(MeshView, self).keyPressEvent(e)
+        if e.key() == qt.Key_W:
+            self._mesh.setWireFrame()
+            self.updateGL()
+        if e.key() == qt.Key_S:
+            self._mesh.setSmoothShaded()
+            self.updateGL()
+        if e.key() == qt.Key_T:
+            self._mesh.setFlatShaded()
+            self.updateGL()
+        else:
+            super(MeshView, self).keyPressEvent(e)
+    # def mouseMoveEvent(self, e):
+    #     super(MeshView, self).mouseMoveEvent(e)
+    #     print 'pos', self.screenToScene(e.x(), e.y())

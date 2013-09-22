@@ -8,7 +8,7 @@ from PyQt4.QtCore import *
 from PyQt4.QtGui import *
 from PyQt4.QtCore import Qt as qt
 
-from arc import Arc, arcFromAngles, arcFromVectors
+from arc import Arc
 from algo import (xsectLineRect1, linesCollinear, pointOnLine, pointOnArc,
                   isPointOnArc, xsectArcRect1, vectorToAbsAngle,
                   clamp, isPointOnLineSeg)
@@ -836,9 +836,9 @@ class RadiusDim(Dimension):
             if bis90V.dotProduct(apV, bis90V) >= 0.0:
                 # is the start point left of the bisector?
                 if spLeftOfBisector:
-                    extensionArc = arcFromVectors(spV, apV, arcRadius, True)
+                    extensionArc = Arc.fromVectors(spV, apV, arcRadius, True)
                 else:
-                    extensionArc = arcFromVectors(epV, apV, arcRadius, True)
+                    extensionArc = Arc.fromVectors(epV, apV, arcRadius, True)
                 pp.arcMoveTo(r, -extensionArc.start() - self.gapAngle)
                 pp.arcTo(r, -extensionArc.start() - self.gapAngle,
                          -extensionArc.span() - self.extAngle)
@@ -846,9 +846,9 @@ class RadiusDim(Dimension):
             else:
                 # is the start point left of the bisector?
                 if spLeftOfBisector:
-                    extensionArc = arcFromVectors(epV, apV, arcRadius, False)
+                    extensionArc = Arc.fromVectors(epV, apV, arcRadius, False)
                 else:
-                    extensionArc = arcFromVectors(spV, apV, arcRadius, False)
+                    extensionArc = Arc.fromVectors(spV, apV, arcRadius, False)
                 pp.arcMoveTo(r, -extensionArc.start() + self.gapAngle)
                 pp.arcTo(r, -extensionArc.start() + self.gapAngle,
                          -extensionArc.span() + self.extAngle)
@@ -967,11 +967,11 @@ class AngleDim(Dimension):
         if dp(labelV, lVperp) > 0.0:
             if outside:
                 # leader from lable to left arrow
-                arc = arcFromVectors(labelV, lV, radius, False)
+                arc = Arc.fromVectors(labelV, lV, radius, False)
                 arc.center(xsectP)
                 clipP = xsectArcRect1(arc, tb)
                 if clipP:
-                    arc = arcFromVectors(QVector2D(clipP - xsectP), lV,
+                    arc = Arc.fromVectors(QVector2D(clipP - xsectP), lV,
                                          radius, False)
                     arc.center(xsectP)
                     pp.arcMoveTo(rect, arc.start())
@@ -982,11 +982,11 @@ class AngleDim(Dimension):
                 pp.arcTo(rect, sa, -fixedLeaderSpan)
             else:
                 # leader from label, through left arrow, to right arrow
-                arc = arcFromVectors(labelV, rV, radius, False)
+                arc = Arc.fromVectors(labelV, rV, radius, False)
                 arc.center(xsectP)
                 clipP = xsectArcRect1(arc, tb)
                 if clipP:
-                    arc = arcFromVectors(QVector2D(clipP - xsectP), rV,
+                    arc = Arc.fromVectors(QVector2D(clipP - xsectP), rV,
                                          radius, False)
                     arc.center(xsectP)
                     pp.arcMoveTo(rect, arc.start())
@@ -995,11 +995,11 @@ class AngleDim(Dimension):
         elif dp(labelV, rVperp) > 0.0:
             if outside:
                 # leader from label to right arrow
-                arc = arcFromVectors(labelV, rV, radius)
+                arc = Arc.fromVectors(labelV, rV, radius)
                 arc.center(xsectP)
                 clipP = xsectArcRect1(arc, tb)
                 if clipP:
-                    arc = arcFromVectors(QVector2D(clipP - xsectP), rV,
+                    arc = Arc.fromVectors(QVector2D(clipP - xsectP), rV,
                                          radius)
                     arc.center(xsectP)
                     pp.arcMoveTo(rect, arc.start())
@@ -1010,11 +1010,11 @@ class AngleDim(Dimension):
                 pp.arcTo(rect, sa, fixedLeaderSpan)
             else:
                 # leader from label, through right arrow, to left arrow
-                arc = arcFromVectors(labelV, lV, radius)
+                arc = Arc.fromVectors(labelV, lV, radius)
                 arc.center(xsectP)
                 clipP = xsectArcRect1(arc, tb)
                 if clipP:
-                    arc = arcFromVectors(QVector2D(clipP - xsectP), lV,
+                    arc = Arc.fromVectors(QVector2D(clipP - xsectP), lV,
                                          radius)
                     arc.center(xsectP)
                     pp.arcMoveTo(rect, arc.start())
@@ -1032,17 +1032,18 @@ class AngleDim(Dimension):
                 pp.arcTo(rect, sa, fixedLeaderSpan)
             else:
                 # leader from label to left arrow
-                clipP = xsectArcRect1(arcFromVectors(labelV, lV, radius), tb)
+                clipP = xsectArcRect1(Arc.fromVectors(labelV, lV, radius), tb)
                 if clipP:
-                    arc = arcFromVectors(QVector2D(clipP - xsectP), lV, radius)
+                    arc = Arc.fromVectors(QVector2D(clipP - xsectP), lV,
+                                          radius)
                     pp.arcMoveTo(rect, arc.start())
                     pp.arcTo(rect, arc.start(), arc.span())
                 # to right arrow
-                clipP = xsectArcRect1(arcFromVectors(labelV, rV, radius,
-                                                     False), tb)
+                clipP = xsectArcRect1(Arc.fromVectors(labelV, rV, radius,
+                                                      False), tb)
                 if clipP:
-                    arc = arcFromVectors(QVector2D(clipP - xsectP), rV, radius,
-                                         False)
+                    arc = Arc.fromVectors(QVector2D(clipP - xsectP), rV,
+                                          radius, False)
                     pp.arcMoveTo(rect, arc.start())
                     pp.arcTo(rect, arc.start(), arc.span())
         # arrow tips

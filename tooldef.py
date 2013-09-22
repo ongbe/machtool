@@ -121,7 +121,7 @@ from PyQt4.QtGui import *
 from PyQt4.QtCore import Qt as qt
 
 from dimension import TextLabel, LinearDim, RadiusDim, AngleDim
-from arc import Arc, arcFromAngles
+from arc import Arc
 
 from strutil import *
 
@@ -1095,7 +1095,7 @@ class TaperBallMillDef(TaperEndMillDef):
         # flute diameter dimension (actually a RadiusDim)
         tr = self.diaDim.dimText.sceneBoundingRect()
         labelP = QPointF(-p2[0] - tr.width(), tr.height() * -1.0)
-        arc = arcFromAngles(180.0 + a, -a, frad)
+        arc = Arc.fromAngles(180.0 + a, -a, frad)
         arc.center(QPointF(p1[0], frad))
         self.diaDim.config({'value': dia,
                             'pos': labelP,
@@ -1766,19 +1766,19 @@ class RadiusMillDef(ToolDef):
             if sdia > bdia:
                 self._cutterProfile = [p1, p2, p3, (p4, (rc.x(), rc.y()),
                                                     'clw'),
-                                       p5]
-                self._shankProfile = [p5, p6, p7, p8, p9]
+                                       p5, p6]
+                self._shankProfile = [p6, p7, p8, p9]
             else:
                 self._cutterProfile = [p1, p2, p3, (p4, (rc.x(), rc.y()),
                                                     'clw'),
-                                       p5]
-                self._shankProfile = [p5, p6, p7, p8, p9]
+                                       p5, p6, p7]
+                self._shankProfile = [p7, p8, p9]
         else:
             self._profile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'), p5, p8,
                             p9]
             self._cutterProfile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'),
-                                   p5]
-            self._shankProfile = [p5, p7, p8, p9]
+                                   p5, p6]
+            self._shankProfile = [p7, p8, p9]
         return p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal, bdia, blen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal,
                     bdia, blen):

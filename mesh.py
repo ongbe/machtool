@@ -13,7 +13,7 @@ from PyQt4.QtGui import QVector2D, QVector3D
 from PyQt4.QtCore import QPointF
 import OpenGL.GL as gl
 
-from arc import arcFromVectors
+from arc import Arc
 from bbox import BBox
 
 pi2 = pi*2
@@ -27,8 +27,8 @@ class Patch(object):
     """A section of a Mesh.
 
     Smooth normals are computed per patch. This results in sharp edges between
-    non-tangent patches. Each patch contains an index into its parent mesh's
-    vertices.
+    non-tangent patches. Each patch contains a start index into its parent
+    mesh's vertices.
     """
     def __init__(self, mesh):
         """Initialize a Patch
@@ -42,9 +42,18 @@ class Patch(object):
         self._startIndex = mesh.vertexCount()
         # indices into the parent mesh's vertex list
         self._indices = []
-        self.setColor()
-    def setColor(self, color=[0.1, 0.1, 0.7, 1.0]):
+        # r, g, b, a
+        self._color = [0.1, 0.1, 0.7, 1.0]
+        # 'wire', 'flat', or 'smooth'
+        self._surfaceMode = 'smooth'
+    def setColor(self, color):
         self._color = color
+    def setWireFrame(self):
+        self._surfaceMode = 'wire'
+    def setSmoothShaded(self):
+        self._surfaceMode = 'smooth'
+    def setFlatShaded(self):
+        self._surfaceMode = 'flat'
     def startIndex(self):
         """Return this patch's offset into its parent mesh's vertices.
         """
@@ -132,19 +141,22 @@ class Patch(object):
         arcDir -- 'cclw' or 'clw'
 
         It is assumes the points are in the XZ plane and the axis of
-        revolution is paralles to the vector (0, 0, 1), and passes through the
+        revolution is parallel to the vector (0, 0, 1), and passes through the
         point (0, 0, 0).
         """
         a = x1 - cx
         b = z1 - cz
         r = sqrt(a*a + b*b)
-        arc = arcFromVectors(QVector2D(a, b),
-                             QVector2D(x2 - cx, z2 - cz),
-                             r,
-                             arcDir == 'cclw')
+        arc = Arc.fromVectors(QVector2D(a, b),
+                              QVector2D(x2 - cx, z2 - cz),
+                              r,
+                              arcDir == 'cclw')
+        # TODO: By halving the mesh segs ( * 0.5), fewer triangles are
+        #       created. Shading is ok but arc edges look blocky.
+        angstep = 360.0 / (self._mesh.segs * 0.5)
         angstep = 360.0 / self._mesh.segs
         # minimum 2 segments in the arc
-        segs = int(abs(arc.span()) / angstep) + 1
+        segs = max(int(abs(arc.span()) / angstep), 3)
         step = arc.span() / segs
         sa = arc.startAngle()
         a1 = radians(sa)
@@ -172,6 +184,34 @@ class Patch(object):
             x2 = cx + r * cos(a2)
             z2 = cz + r * sin(a2)
             self.addRevLineSeg(x1, z1, x2, z2)
+    def render(self):
+        """Render this Patch.
+        """
+        if self._surfaceMode == 'smooth':
+            gl.glEnable(gl.GL_LIGHTING)
+            gl.glPolygonMode(gl.GL_FRONT, gl.GL_FILL)
+            gl.glShadeModel(gl.GL_SMOOTH)
+            gl.glEnable(gl.GL_LINE_SMOOTH)
+            gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+                            self._color)
+            gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
+                            [0.3, 0.3, 1.0, 1.0])
+            gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SHININESS, 64)
+        elif self._surfaceMode == 'wire':
+            gl.glDisable(gl.GL_LIGHTING)
+            gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
+            gl.glColor(*self._color)
+        elif self._surfaceMode == 'flat':
+            gl.glEnable(gl.GL_LIGHTING)
+            gl.glPolygonMode(gl.GL_FRONT, gl.GL_FILL)
+            gl.glShadeModel(gl.GL_FLAT)
+            gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+                            self._color)
+            gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
+                            [0.0, 0.0, 1.0, 1.0])
+            gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SHININESS, 128)
+        gl.glDrawElements(gl.GL_TRIANGLES, self._nTris * 3,
+                          gl.GL_UNSIGNED_INT, self._indices)
     @staticmethod
     def fromRevLineSeg(x1, z1, x2, z2, mesh):
         """Create a revolved Patch from a line segment.
@@ -199,18 +239,6 @@ class Patch(object):
         patch = Patch(mesh)
         patch.addRevArcSeg(x1, z1, x2, z2, cx, cz, arcDir)
         return patch
-    def render(self):
-        """Render this Patch.
-        """
-        # gl.glDisable(gl.GL_LIGHTING)
-        # gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
-        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
-                        self._color)
-        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
-                        [0.3, 0.3, 1.0, 1.0])
-        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SHININESS, 64)
-        gl.glDrawElements(gl.GL_TRIANGLES, self._nTris * 3,
-                          gl.GL_UNSIGNED_INT, self._indices)
         
 
 class Mesh(object):
@@ -231,6 +259,28 @@ class Mesh(object):
         self._prevStartIndex = 1e10
         # vertice bounding box
         self._bbox = None
+    def setColor(self, color):
+        """Set the color for all child patches.
+
+        color -- (r, g, b, a)
+        """
+        for patch in self._patches:
+            patch.setColor(color)
+    def setWireFrame(self):
+        """Set all patches to render as triangles.
+        """
+        for patch in self._patches:
+            patch.setWireFrame()
+    def setSmoothShaded(self):
+        """Set all patches to render smooth shaded.
+        """
+        for patch in self._patches:
+            patch.setSmoothShaded()
+    def setFlatShaded(self):
+        """Set all patches to render flat shaded.
+        """
+        for patch in self._patches:
+            patch.setFlatShaded()
     def blendTangent(self, blend):
         """Search the previous Patch's vertices when adding a vertex.
         
@@ -346,10 +396,10 @@ class RevolvedMesh(Mesh):
     """
     segs = 32
     sincos = getSinCosCache(segs)
-    def __init__(self, profile=None):
+    def __init__(self, profile=None, color=[0.1, 0.1, 0.7, 1.0], close=False):
         super(RevolvedMesh, self).__init__()
         if profile:
-            self.addProfile(profile)
+            self.addProfile(profile, color, close)
     def _isLineTanToArc(self, x1, y1, x2, y2, cx, cy, d):
         """Find if the line is tangent to the arc.
 
@@ -392,12 +442,26 @@ class RevolvedMesh(Mesh):
             return True
         else:
             return False
-    def addProfile(self, profile, color=None):
+    def addProfile(self, profile, color=None, close=False):
         """Create each Patch defined by the profile.
 
         profile -- a list of tuples as defined in tooldef.py
         color -- [r, g, b, a]
+        close -- if True and the profile start or end points are not on
+                 the axis of revolution, insert one with X=0.0 and Z
+                 equal to the start or end point Z.
         """
+        if close:
+            e1 = profile[0]     # will always be a point
+            if e1[0] != 0.0:
+                profile = [(0.0, e1[1])] + profile
+            e2 = profile[-1]
+            if e2[0] != 0.0:
+                if len(e2) == 2:
+                    profile.append((0.0, e2[1]))
+                else:
+                    # profile ends in an arc
+                    profile.append((0.0, e2[0][1]))
         # previous line start x/y, for line -> arc
         px1 = py1 = None
         for e1, e2 in windowItr(profile, 2, 1):
@@ -437,8 +501,8 @@ class RevolvedMesh(Mesh):
                 if color:
                     patch.setColor(color)
                 self._patches.append(patch)
-                px1 = x1
-                py1 = y1
+                px1 = aex
+                py1 = aey
             # arc -> arc
             # TODO: untested, no tool defined with this geometry
             else:
@@ -452,4 +516,3 @@ class RevolvedMesh(Mesh):
                     patch.setColor(color)
                 self._patches.append(patch)
         self._bbox = BBox.fromVertices(self._sharedVertices)
-

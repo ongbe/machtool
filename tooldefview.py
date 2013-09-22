@@ -98,22 +98,25 @@ class ToolDefView(QGraphicsView):
         given focus. If one is already visible and the mouse is clicked on
         anything except another dimension text, the line edit is hidden.
         """
-        item = self.itemAt(e.pos())
-        self.commentBox.hide()
-        self.dimBox.hide()
-        if item and isinstance(item, (DimLabel, CommentLabel)):
-            if isinstance(item, DimLabel):
-                box = self.dimBox
-            elif isinstance(item, CommentLabel):
-                box = self.commentBox
-            box.setItem(item)
-            box.setText(item.text())
-            box.selectAll()
-            box.show()
-            self.posEditBox(box)
-            box.setFocus()
-    # def mouseMoveEvent(self, e):
-    #     print self.mapToScene(e.pos())
+        # other buttons do nothing
+        if e.button() == qt.LeftButton:
+            item = self.itemAt(e.pos())
+            self.commentBox.hide()
+            self.dimBox.hide()
+            if item and isinstance(item, (DimLabel, CommentLabel)):
+                if isinstance(item, DimLabel):
+                    box = self.dimBox
+                elif isinstance(item, CommentLabel):
+                    box = self.commentBox
+                box.setItem(item)
+                box.setText(item.text())
+                box.selectAll()
+                box.show()
+                self.posEditBox(box)
+                box.setFocus()
+    def keyPressEvent(self, e):
+        # eat it
+        pass
     def wheelEvent(self, e):
-        e.accept()              # eat it so the scene does not scroll
-    
+        # eat it
+        pass

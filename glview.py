@@ -51,14 +51,14 @@ class GLView(QGLWidget):
                                 [0.0, 1.0, 0.0, 0.0],
                                 [0.0, 0.0, 1.0, 0.0],
                                 [0.0, 0.0, 0.0, 1.0]]
-        self.sceneCenter = (0.0, 0.0)
+        self.sceneCenter = [0.0, 0.0]
         self.sceneWidth = 10.0
         self.sceneHeight = 10.0
         self.aspect = 1.0
         self.rotFactor = 0.75
         self.lastMousePos = QPoint()
-        self.minZoom = 0.1
-        self.maxZoom = 30.0
+        self.minZoom = 0.01
+        self.maxZoom = 100.0
         self.setMouseTracking(True)
         self.createContextMenu()
     def setRotCenter(self, p):
@@ -99,15 +99,16 @@ class GLView(QGLWidget):
         """
         return [2.0 / (projMatrix[0][0] * self.width()),
                 2.0 / (projMatrix[1][1] * self.height())]
-    # TODO: I got the y backwards and everything else depends on it
     def screenToScene(self, x, y):
         """Find the scene coordinates of the pixel
+
+        x, y -- pixel coordinates
 
         Return (x, y)
         """
         pw, ph = self.pixelSize(gl.glGetFloat(gl.GL_PROJECTION_MATRIX))
-        return (self.sceneCenter[0] - (self.sceneWidth * 0.5) + pw * x,
-                self.sceneCenter[1] - (self.sceneHeight * 0.5) + ph * y)
+        return (self.sceneCenter[0] - self.sceneWidth * 0.5 + pw * x,
+                self.sceneCenter[1] + self.sceneHeight * 0.5 + ph * -y)
     def ortho(self):
         """Set up the scene's bounds
         """
@@ -127,6 +128,7 @@ class GLView(QGLWidget):
         self.aspect = float(w) / h
         gl.glViewport(0, 0, w, h)
         self.ortho()
+        self.updateGL()
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         axisLen = 2.0
@@ -148,6 +150,7 @@ class GLView(QGLWidget):
         """
         gl.glLoadIdentity()
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
+        print type(self.modelviewMatrix)
         if update:
             self.updateGL()
     def bottomView(self, update=True):
@@ -236,10 +239,12 @@ class GLView(QGLWidget):
         # self.updateGL()
     def pan(self, dx, dy):
         """Shift the scene origin by dx/dy pixels
+
+        dx, dy -- mouse deltas in pixels
         """
         pw, ph = self.pixelSize(gl.glGetFloat(gl.GL_PROJECTION_MATRIX))
         self.sceneCenter[0] -= pw * dx
-        self.sceneCenter[1] += ph * dy
+        self.sceneCenter[1] -= ph * -dy
         self.ortho()
         self.updateGL()
     def fit(self, p1, p2, pad=True):

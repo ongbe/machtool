@@ -38,8 +38,7 @@ class MainWindow(QMainWindow):
         tdef = self.tdefWidget.toolDef
         sprof = tdef.shankProfile()
         cprof = tdef.cutterProfile()
-        mesh = RevolvedMesh()
-        mesh.addProfile(cprof)
+        mesh = RevolvedMesh(cprof)
         mesh.addProfile(sprof, (0.5, 0.5, 0.5, 1.0))
         self.meshview.setMesh(mesh)
         self.meshview.fitMesh()
@@ -49,8 +48,7 @@ class MainWindow(QMainWindow):
         tdef = self.tdefWidget.toolDef
         sprof = tdef.shankProfile()
         cprof = tdef.cutterProfile()
-        mesh = RevolvedMesh()
-        mesh.addProfile(cprof)
+        mesh = RevolvedMesh(cprof)
         mesh.addProfile(sprof, (0.5, 0.5, 0.5, 1.0))
         self.meshview.setMesh(mesh)
         self.meshview.frontView()
@@ -59,7 +57,20 @@ class MainWindow(QMainWindow):
         if toolBrowser.isDirty():
             toolBrowser.saveToolMap()
         e.accept()
-
+    def keyPressEvent(self, e):
+        # TODO: temp debug
+        from math import sin, cos, radians
+        if e.key() == qt.Key_Space:
+            mesh = RevolvedMesh()
+            r = 1
+            rads = radians(-45)
+            x = r * cos(rads)
+            y = r + r * sin(rads)
+            mesh.addProfile([(0, 0), [(x, y), (0, r), 'cclw']],
+                             close=True)
+            self.meshview.setMesh(mesh)
+            self.meshview.fitMesh()
+            
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)

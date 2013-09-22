@@ -98,50 +98,49 @@ class Arc(object):
             raise ArcException('Arc of 360 degrees has no bisector')
         a = radians(self.m['start'] + self.m['span'] / 2.0)
         return QVector2D(cos(a), sin(a))
+    @staticmethod
+    def fromAngles(a1, a2, radius, cclw=True):
+        """Construct an arc centered @ (0, 0) from a1 to a2.
+        
+        a1, a2 -- signed angles in degrees
+        radius -- arc radius
+        cclw -- If True, return a counter-clockwise arc (positive span angle)
+                from a1 to a2, else a clockwise arc (negative span angle).
 
-def arcFromAngles(a1, a2, radius, cclw=True):
-    """Construct an arc centered @ (0, 0) from a1 to a2.
-    
-    a1, a2 -- signed angles in degrees
-    radius -- arc radius
-    cclw -- If True, return a counter-clockwise arc (positive span angle) from
-            a1 to a2, else a clockwise arc (negative span angle).
+        If a1 and a2 are equal, the arc will span +/-360.0 degrees.
 
-    If a1 and a2 are equal, the arc will span +/-360.0 degrees.
-
-    Return an Arc.
-    """
-    a = Arc()
-    if a1 == a2:
-        a.config({'radius': radius,
-                  'start': 0.0,
-                  'span': 360.0 if cclw else -360.0})
-    else:
-        a1 %= 360.0
-        a2 %= 360.0
-        if cclw:
+        Return an Arc.
+        """
+        a = Arc()
+        if a1 == a2:
             a.config({'radius': radius,
-                      'start': a1,
-                      'span': (a2 + 360.0 if a2 < a1 else a2) - a1})
+                      'start': 0.0,
+                      'span': 360.0 if cclw else -360.0})
         else:
-            a.config({'radius': radius,
-                      'start': a1,
-                      'span': -((a1 + 360.0 if a1 < a2 else a1) - a2)})
-    return a
+            a1 %= 360.0
+            a2 %= 360.0
+            if cclw:
+                a.config({'radius': radius,
+                          'start': a1,
+                          'span': (a2 + 360.0 if a2 < a1 else a2) - a1})
+            else:
+                a.config({'radius': radius,
+                          'start': a1,
+                          'span': -((a1 + 360.0 if a1 < a2 else a1) - a2)})
+        return a
+    @staticmethod
+    def fromVectors(v1, v2, radius, cclw=True):
+        """Construct an arc centered @ (0, 0) from v1 to v2.
 
+        v1, v2 -- QVector2D (do not have to be normalized)
+        radius -- arc radius
+        cclw -- if True, the arc will span counter-clockwise from v1 to v2
 
-def arcFromVectors(v1, v2, radius, cclw=True):
-    """Construct an arc centered @ (0, 0) from v1 to v2.
-
-    v1, v2 -- QVector2D (do not have to be normalized)
-    radius -- arc radius
-    cclw -- if True, the arc will span counter-clockwise from v1 to v2
-
-    Return an Arc
-    """
-    a1 = degrees(atan2(v1.y(), v1.x()))
-    a2 = degrees(atan2(v2.y(), v2.x()))
-    return arcFromAngles(a1, a2, radius, cclw)
+        Return an Arc
+        """
+        a1 = degrees(atan2(v1.y(), v1.x()))
+        a2 = degrees(atan2(v2.y(), v2.x()))
+        return Arc.fromAngles(a1, a2, radius, cclw)
         
 
 if __name__ == '__main__':
@@ -152,9 +151,9 @@ if __name__ == '__main__':
     # print ' angle diff', a1.angleDiff()
     # p1 = QPointF(-1, 1)
     # p2 = QPointF(1, -1)
-    # print arcFromPoints(p1, p2, cclw=True).m
+    # print Arc.fromPoints(p1, p2, cclw=True).m
     a1 = -120
     a2 = 90
-    print arcFromAngles(a1, a2, 1, cclw=False).m
+    print Arc.fromAngles(a1, a2, 1, cclw=False).m
 
     

@@ -72,6 +72,16 @@ class BBox(object):
         for x, y, z in vertices:
             p1 = [min(x, p1[0]), min(y, p1[1]), min(z, p1[2])]
             p2 = [max(x, p2[0]), max(y, p2[1]), max(z, p2[2])]
+        # expand the box for planar point sets
+        if p1[0] == p2[0]:
+            p1[0] -= .001
+            p2[0] += .001
+        if p1[1] == p2[1]:
+            p1[1] -= .001
+            p2[1] += .001
+        if p1[2] == p2[2]:
+            p1[2] -= .001
+            p2[2] += .001
         return BBox(p1, p2)
     def size(self):
         """Return (x width , y height, z depth)
