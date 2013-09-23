@@ -14,6 +14,7 @@ from PyQt4.QtCore import Qt as qt
 from PyQt4.QtOpenGL import *
 import OpenGL.GL as gl
 import OpenGL.GLU as glu
+import numpy as np
 
 class GLView(QGLWidget):
     """An OpenGL viewer with pan/rotate/zoom + fixed orientation views.
@@ -47,10 +48,7 @@ class GLView(QGLWidget):
     def __init__(self, parent):
         super(GLView, self).__init__(parent)
         self.rotCenter = [0.0, 0.0, 0.0]
-        self.modelviewMatrix = [[1.0, 0.0, 0.0, 0.0],
-                                [0.0, 1.0, 0.0, 0.0],
-                                [0.0, 0.0, 1.0, 0.0],
-                                [0.0, 0.0, 0.0, 1.0]]
+        self.modelviewMatrix = np.identity(4)
         self.sceneCenter = [0.0, 0.0]
         self.sceneWidth = 10.0
         self.sceneHeight = 10.0
@@ -150,7 +148,6 @@ class GLView(QGLWidget):
         """
         gl.glLoadIdentity()
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
-        print type(self.modelviewMatrix)
         if update:
             self.updateGL()
     def bottomView(self, update=True):
@@ -212,8 +209,9 @@ class GLView(QGLWidget):
 
         dx, dy -- mouse deltas
         """
+        # NUMPY: delta magnitude
         self.rotateScene([dy, dx, 0],
-                         self.rotFactor * sqrt(dx*dx + dy*dy))
+                         self.rotFactor * np.linalg.norm([dx, dy]))
     def rotateScene(self, axis, angle):
         """Apply the scene-relative rotation to the model view matrix.
 
@@ -222,8 +220,6 @@ class GLView(QGLWidget):
 
         Y+ is up, X+ is right
         """
-        axis = QVector3D(*axis)
-        axisN = axis.normalized()
         # find the rotation center point @ the current rotation
         gl.glPushMatrix()
         gl.glTranslatef(*self.rotCenter)
@@ -231,9 +227,10 @@ class GLView(QGLWidget):
         gl.glPopMatrix()
         gl.glLoadIdentity()
         # now shift/rotate/unshift and mulitiply
-        gl.glTranslatef(m[3][0], m[3][1], m[3][2])
-        gl.glRotate(angle, axisN.x(), axisN.y(), axisN.z())
-        gl.glTranslatef(-m[3][0], -m[3][1], -m[3][2])
+        gl.glTranslatef(*m[3,:3]) # NUMPY: indexing
+        gl.glRotate(angle, *axis)
+        gl.glTranslatef(*(m[3,:3] * -1.0))
+        # gl.glTranslatef(-m[3, 0], -m[3, 1], -m[3, 2]) # NUMPY: indexing
         gl.glMultMatrixf(self.modelviewMatrix)
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         # self.updateGL()
@@ -250,13 +247,13 @@ class GLView(QGLWidget):
     def fit(self, p1, p2, pad=True):
         """Fit the rectangle define by the two points into the scene.
 
-        p1, p2 -- rectangle opposite sides
-        pad -- if True, include a small outside margin
+        p1, p2 -- [x, y], rectangle opposite sides
+        pad -- if True, include a 2% outside margin
         """
-        x1 = p1.x()
-        y1 = p1.y()
-        x2 = p2.x()
-        y2 = p2.y()
+        x1 = p1[0]
+        y1 = p1[1]
+        x2 = p2[0]
+        y2 = p2[1]
         w = abs(x2 - x1)
         h = abs(y2 - y1)
         if w == 0 or h == 0:
@@ -317,10 +314,20 @@ class GLView(QGLWidget):
         """Handle key press events
 
         GLView handles the arrow keys and nothing else. They rotate the scene
-        about the vertical or horizontal axes.
+        about the vertical or horizontal axes and, if the Alt key is pressed,
+        rotate about the axis perpendicular to the screen.
         """
         # OpenGL defaults to Y+ up, so (0, 1, 0) is the vertical axis
-        if e.key() == qt.Key_Left:
+        if e.modifiers() == qt.AltModifier:
+            if e.key() == qt.Key_Left:
+                self.rotateScene((0, 0, 1), self.arrowRotationStep)
+                self.updateGL()
+            elif e.key() == qt.Key_Right:
+                self.rotateScene([0, 0, 1], -self.arrowRotationStep)
+                self.updateGL()
+            else:
+                super(GLView, self).keyPressEvent(e)
+        elif e.key() == qt.Key_Left:
             self.rotateScene([0, 1, 0], -self.arrowRotationStep)
             self.updateGL()
         elif e.key() == qt.Key_Right:
@@ -332,4 +339,5 @@ class GLView(QGLWidget):
         elif e.key() == qt.Key_Down:
             self.rotateScene([1, 0, 0], self.arrowRotationStep)
             self.updateGL()
-        super(GLView, self).keyPressEvent(e)
+        else:
+            super(GLView, self).keyPressEvent(e)

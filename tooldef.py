@@ -36,31 +36,16 @@ Example JSON Object for a Bull End Mill
 
 Tool Profile
 ============
-The right side of the profile is stored in ToolDef.profile as a list of
-tuples. If the tuple has two elements it defines the point (x, y). Otherwise
-it defines the arc ((endX, endY), (centerX, centerY), ['clw' | 'cclw']). Each
-profile will start and end on the centerline. Each ToolDef instance has a
-'hasStep' attribute. This will be True if the "shankDia" entry is not equal to
-another diameter of the tool, usually the "dia" entry. Because the previous
-bull mill's shank dia is the same as its dia, two extra points are not
-needed. Its hasStep will be False.
+The right side of the profile can be retrieved with profile(). It will return
+the elements of a Path2d. Each profile will start and end on the centerline.
+
+shankProfile() cutterProfile() will retrieve their respective profiles.
 
 Note: QPainterPath has a similar list of the elements but arcs are stored
       as cubic approximations.
 
-Note: ToolDef.profile is always stored in inches. If the tool is metric, the
+Note: ToolDef._profile is always stored in inches. If the tool is metric, the
       values are converted.
-
-Example Profile of the Previous Bull End Mill
----------------------------------------------
-The values start at the origin at the bottom, and end at the center of the
-shank at the top.
-
- [(0, 0),
-  (0.375, 0.0),
-  ((0.25, 0.125), (0.375, 0.125), 'cclw'),
-  (0.5, 3.0),
-  (0.0, 3.0)]
 
 Tool Validity
 =============
@@ -122,6 +107,7 @@ from PyQt4.QtCore import Qt as qt
 
 from dimension import TextLabel, LinearDim, RadiusDim, AngleDim
 from arc import Arc
+from path2d import Path2d
 
 from strutil import *
 
@@ -147,7 +133,6 @@ class ToolDef(QGraphicsPathItem):
     def __init__(self, specs):
         super(ToolDef, self).__init__()
         self._checkSpecs(specs)       # call subclasses method
-        self.ppath = QPainterPath()
         pen = QPen(QColor(0, 0, 255))
         pen.setWidth(2)         # 2 pixels wide
         pen.setCosmetic(True)   # don't scale line width
@@ -155,12 +140,13 @@ class ToolDef(QGraphicsPathItem):
         self.commentText = CommentLabel()
         self.commentText.font.setBold(True)
         self.commentText.setToolTip("name")
-        # The right side of the profile as described in this module's document
-        # string.
+        # The right side of the profile. A Path2d instance
         self._profile = None
-        # True if there is an extra step in the profile for cases where the
-        # shankDiam != another diameter of the tool. Usually the cutter dia.
-        self.hasStep = False
+        # Describes the shank dia in relation to the cutter dia.
+        # * -1 shank < dia
+        # *  0 shank == dia
+        # *  1 shank > dia
+        self._shankStep = 0
         self.specs = copy(specs)
         self.prepareGeometryChange()
         self._updateProfile()
@@ -182,18 +168,25 @@ class ToolDef(QGraphicsPathItem):
 
         If the tool is metric, convert the defintion to inch first.
         """
+        p = self._profile.elements()
         if self.isMetric():
-            return self._convertProfToInch(self._profile)
+            return self._convertProfToInch(p)
         else:
-            return self._profile
+            return p
     def cutterProfile(self):
-        if self.isMetric():
-            return self._convertProfToInch(self._cutterProfile)
-        return self._cutterProfile
+        """Return the profile defintion of all geometry except the shank.
+        """
+        if self._shankStep > 0:
+            return self.profile()[:-3]
+        else:
+            return self.profile()[:-2]
     def shankProfile(self):
-        if self.isMetric():
-            return self._convertProfToInch(self._shankProfile)
-        return self._shankProfile
+        """Return the profile definition of the shank.
+        """
+        if self._shankStep > 0:
+            return self.profile()[-4:]
+        else:
+            return self.profile()[-3:]
     def paint(self, painter, option, widget):
         """Draw a centerline.
         """
@@ -434,12 +427,12 @@ class DrillDef(ToolDef):
         return True
     def _updateProfile(self):
         sdia = self.specs['shankDia']
+        srad = sdia / 2.0
         dia = self.specs['dia']
+        frad = dia / 2.0
         flen = self.specs['fluteLength']
         angle = self.specs['angle']
         oal = self.specs['oal']
-        srad = sdia / 2.0
-        frad = dia / 2.0
         tiplen = self._tipLength(angle, dia)
         p1 = (0, 0)
         p2 = (frad, tiplen)
@@ -447,34 +440,23 @@ class DrillDef(ToolDef):
         p4 = (srad, tiplen + flen)
         p5 = (srad, tiplen + oal)
         p6 = (0, tiplen + oal)
-        self.hasStep = dia != sdia
-        pp = QPainterPath()
-        # right side
-        pp.moveTo(*p1)
-        pp.lineTo(*p2)
-        if self.hasStep:
-            pp.lineTo(*p3)
-            pp.lineTo(*p4)
-        pp.lineTo(*p5)
-        pp.lineTo(*p6)
-        # left
+        self._shankStep = cmp(sdia, dia)
+        # geom path
+        path2d = Path2d(p1)
+        path2d.lineTo(*p2)
+        path2d.lineTo(*p3)
+        if self._shankStep:
+            path2d.lineTo(*p4)
+        path2d.lineTo(*p5)
+        path2d.lineTo(*p6)
+        self._profile = path2d
+        # painter path
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(p3[0], p3[1])
         self.setPath(pp)
-        if self.hasStep:
-            self._profile = [p1, p2, p3, p4, p5, p6]
-            if sdia > dia:
-                self._cutterProfile = [p1, p2, p3]
-                self._shankProfile = [p3, p4, p5, p6]
-            else:
-                self._cutterProfile = [p1, p2, p3, p4]
-                self._shankProfile = [p4, p5, p6]
-        else:
-            self._profile = [p1, p2, p5, p6]
-            self._cutterProfile = [p1, p2, p3]
-            self._shankProfile = [p3, p5, p6]
         return [p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen, sdia, flen]
     def _updateDims(self, p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen,
                     sdia, flen):
@@ -621,20 +603,17 @@ class CenterDrillDef(ToolDef):
         p4 = (brad, pointLength + tipLength + bellLength)
         p5 = (brad, oal)
         p6 = (0, oal)
-        pp = QPainterPath()
-        # # right side
-        pp.moveTo(*p1)
-        pp.lineTo(*p2)
-        pp.lineTo(*p3)
-        pp.lineTo(*p4)
-        pp.lineTo(*p5)
-        pp.lineTo(*p6)
-        self._profile = [p1, p2, p3, p4, p5, p6]
-        self._cutterProfile = [p1, p2, p3, p4]
-        self._shankProfile = [p4, p5, p6]
-        # # left
+        path2d = Path2d(p1)
+        path2d.lineTo(*p2)
+        path2d.lineTo(*p3)
+        path2d.lineTo(*p4)
+        path2d.lineTo(*p5)
+        path2d.lineTo(*p6)
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         self.setPath(pp)
+        self._profile = path2d
+        # for dim validation
         self.minOAL = p4[1]
         return p1, p5, oal
     def _updateDims(self, p1, p5, oal):
@@ -729,34 +708,21 @@ class EndMillDef(ToolDef):
         p4 = (srad, flen)
         p5 = (srad, oal)
         p6 = (0.0, oal)
-        self.hasStep = sdia != dia
-        pp = QPainterPath()
-        # right side
-        pp.moveTo(*p1)
-        pp.lineTo(*p2)
-        if self.hasStep:
-            pp.lineTo(*p3)
-            pp.lineTo(*p4)
-        pp.lineTo(*p5)
-        pp.lineTo(*p6)
-        # left side
+        self._shankStep = cmp(sdia, dia)
+        path2d = Path2d(p1)
+        path2d.lineTo(*p2)
+        path2d.lineTo(*p3)
+        if self._shankStep:
+            path2d.lineTo(*p4)
+        path2d.lineTo(*p5)
+        path2d.lineTo(*p6)
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         # # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
         self.setPath(pp)
-        if self.hasStep:
-            self._profile = [p1, p2, p3, p4, p5, p6]
-            if srad > frad:
-                self._cutterProfile = [p1, p2, p3]
-                self._shankProfile = [p3, p4, p5, p6]
-            else:
-                self._cutterProfile = [p1, p2, p3, p4]
-                self._shankProfile = [p4, p5, p6]
-        else:
-            self._profile = [p1, p2, p5, p6]
-            self._cutterProfile = [p1, p2, p3]
-            self._shankProfile = [p3, p5, p6]
+        self._profile = path2d
         return p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen):
         """Attempt to intelligently position the dimensions and name label.
@@ -901,35 +867,21 @@ class TaperEndMillDef(ToolDef):
         p4 = (srad, flen)
         p5 = (srad, oal)
         p6 = (0.0, oal)
-        # this will probably never happen without an epsilon test
-        self.hasStep = p3[0] != srad
-        pp = QPainterPath()
-        # right side
-        pp.moveTo(*p1)
-        pp.lineTo(*p2)
-        pp.lineTo(*p3)
-        if self.hasStep:
-            pp.lineTo(*p4)
-        pp.lineTo(*p5)
-        pp.lineTo(*p6)
-        # left side
+        self._shankStep = cmp(srad, p3[0])
+        path2d = Path2d(p1)
+        path2d.lineTo(*p2)
+        path2d.lineTo(*p3)
+        if self._shankStep:
+            path2d.lineTo(*p4)
+        path2d.lineTo(*p5)
+        path2d.lineTo(*p6)
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
         self.setPath(pp)
-        if self.hasStep:
-            self._profile = [p1, p2, p3, p4, p5, p6]
-            if srad > p3[0]:
-                self._cutterProfile = [p1, p2, p3]
-                self._shankProfile = [p3, p4, p5, p6]
-            else:
-                self._cutterProfile = [p1, p2, p3, p4]
-                self._shankProfile = [p4, p5, p6]
-        else:
-            self._profile = [p1, p2, p5, p6]
-            self._cutterProfile = [p1, p2, p3]
-            self._shankProfile = [p3, p5, p6]
+        self._profile = path2d
         return p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen, a
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen,
                     a):
@@ -1057,35 +1009,21 @@ class TaperBallMillDef(TaperEndMillDef):
         p4 = (srad, flen)
         p5 = (srad, oal)
         p6 = (0.0, oal)
-        self.hasStep = p3X != srad
-        pp = QPainterPath()
-        rect = QRectF(-frad, dia, dia, -dia)
-        # right side
-        pp.arcMoveTo(rect, 270)
-        pp.arcTo(rect, 270, 90 - a)
-        pp.lineTo(*p3)
-        if self.hasStep:
-            pp.lineTo(*p4)
-        pp.lineTo(*p5)
-        pp.lineTo(*p6)
-        # left side
+        self._shankStep = cmp(srad, p3X)
+        path2d = Path2d(p1)
+        path2d.arcTo(p2[0], p2[1], 0.0, frad, 'cclw')
+        path2d.lineTo(*p3)
+        if self._shankStep:
+            path2d.lineTo(*p4)
+        path2d.lineTo(*p5)
+        path2d.lineTo(*p6)        
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         # flute line
         pp.moveTo(*p1)
         pp.lineTo(*p3)
         self.setPath(pp)
-        if self.hasStep:
-            self._profile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4, p5, p6]
-            if srad > p3X:
-                self._cutterProfile = [p1, (p2, (0.0, frad), 'cclw'), p3]
-                self._shankProfile = [p3, p4, p5, p6]
-            else:
-                self._cutterProfile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4]
-                self._shankProfile = [p4, p5, p6]
-        else:
-            self._profile = [p1, (p2, (0.0, srad), 'cclw'), p3, p5, p6]
-            self._cutterProfile = [p1, (p2, (0.0, frad), 'cclw'), p3]
-            self._shankProfile = [p3, p5, p6]
+        self._profile = path2d
         return p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal, flen, a
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal,
                     flen, a):
@@ -1207,35 +1145,21 @@ class BallMillDef(EndMillDef):
         p4 = (srad, flen)
         p5 = (srad, oal)
         p6 = (0.0, oal)
-        pp = QPainterPath()
-        self.hasStep = sdia != dia
-        rect = QRectF(-frad, dia, dia, -dia)
-        # left side
-        pp.arcMoveTo(rect, 270.0)
-        pp.arcTo(rect, 270.0, 90.0)
-        if self.hasStep:
-            pp.lineTo(*p3)
-            pp.lineTo(*p4)
-        pp.lineTo(*p5)
-        pp.lineTo(*p6)
-        # left
+        self._shankStep = cmp(sdia, dia)
+        path2d = Path2d(p1)
+        path2d.arcTo(p2[0], p2[1], 0.0, frad, 'cclw')
+        path2d.lineTo(*p3)
+        if self._shankStep:
+            path2d.lineTo(*p4)
+        path2d.lineTo(*p5)
+        path2d.lineTo(*p6)
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         # flute line
         pp.moveTo(0.0, 0.0)
         pp.lineTo(*p3)
         self.setPath(pp)
-        if self.hasStep:
-            self._profile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4, p5, p6]
-            if sdia > dia:
-                self._cutterProfile = [p1, (p2, (0.0, frad), 'cclw'), p3]
-                self._shankProfile = [p3, p4, p5, p6]
-            else:
-                self._cutterProfile = [p1, (p2, (0.0, frad), 'cclw'), p3, p4]
-                self._shankProfile = [p4, p5, p6]
-        else:
-            self._profile = [p1, (p2, (0.0, frad), 'cclw'), p5, p6]
-            self._cutterProfile = [p1, (p2, (0.0, frad), 'cclw'), p3]
-            self._shankProfile = [p3, p5, p6]
+        self._profile = path2d
         return p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen):
         """Attempt to intelligently position the dimensions and name label.
@@ -1356,41 +1280,22 @@ class BullMillDef(EndMillDef):
         p5 = [srad, flen]
         p6 = [srad, oal]
         p7 = [0, oal]
-        self.hasStep = sdia != dia
-        rect = QRectF(frad - r*2, r*2, r*2, -r*2)
-        pp = QPainterPath()
-        # right side
-        pp.moveTo(*p1)
-        pp.lineTo(*p2)
-        pp.arcMoveTo(rect, 270.0)
-        pp.arcTo(rect, 270.0, 90.0)
-        if self.hasStep:
-            pp.lineTo(*p4)
-            pp.lineTo(*p5)
-        pp.lineTo(*p6)
-        pp.lineTo(*p7)
-        # left side
+        self._shankStep = cmp(sdia, dia)
+        path2d = Path2d(p1)
+        path2d.lineTo(*p2)
+        path2d.arcTo(frad, r, p2[0], p3[1], 'cclw')
+        path2d.lineTo(*p4)
+        if self._shankStep:
+            path2d.lineTo(*p5)
+        path2d.lineTo(*p6)
+        path2d.lineTo(*p7)
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         # flute line
         pp.moveTo(-frad + r, 0.0)
         pp.lineTo(*p4)
         self.setPath(pp)
-        if self.hasStep:
-            self._profile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'), p4, p5, p6,
-                            p7]
-            if sdia > dia:
-                self._cutterProfile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'),
-                                       p4]
-                self._shankProfile = [p4, p5, p6, p7]
-            else:
-                self._cutterProfile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'),
-                                       p4, p5]
-                self._shankProfile = [p5, p6, p7]
-        else:
-            self._profile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'), p6, p7]
-            self._cutterProfile = [p1, p2, (p3, (p2[0], p3[1]), 'cclw'),
-                                   p4]
-            self._shankProfile = [p4, p6, p7]
+        self._profile = path2d
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen, r
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen,
                     r):
@@ -1558,36 +1463,22 @@ class WoodruffMillDef(ToolDef):
         p5 = (rect.center().x() - arcX, rect.center().y() + arcY)
         p6 = (srad, oal)
         p7 = (0, oal)
-        self.hasStep = ndia != sdia
-        pp = QPainterPath()
-        # right side
-        pp.moveTo(*p1)
-        pp.lineTo(*p2)
-        pp.lineTo(*p3)
-        pp.lineTo(*p4)
-        if self.hasStep:
-            pp.arcMoveTo(rect, -180.0)
-            pp.arcTo(rect, -180.0, sweepAngle)
-        pp.lineTo(p6[0], p6[1])
-        pp.lineTo(p7[0], p7[1])
-        # left
+        self._shankStep = cmp(sdia, ndia)
+        path2d = Path2d(p1)
+        path2d.lineTo(*p2)
+        path2d.lineTo(*p3)
+        path2d.lineTo(*p4)
+        if self._shankStep:
+            path2d.arcTo(p5[0], p5[1], p4[0] + reliefRadius, p4[1], 'clw')
+        path2d.lineTo(*p6)
+        path2d.lineTo(*p7)
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         # flute line
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(p3[0], p3[1])
         self.setPath(pp)
-        if self.hasStep:
-            self._profile = [p1, p2, p3, p4, (p5, (arcOrigin.x(),
-                                                  arcOrigin.y()),
-                                             'clw'), p6, p7]
-            self._cutterProfile = [p1, p2, p3, p4]
-            self._shankProfile = [p4, (p5, (arcOrigin.x(), arcOrigin.y()),
-                                       'clw'),
-                                  p6, p7]
-        else:
-            self._profile = [p1, p2, p3, p4, p6, p7]
-            self._cutterProfile = [p1, p2, p3, p4]
-            self._shankProfile = [p4, p6, p7]
+        self._profile = path2d
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia, flen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia,
                     flen):
@@ -1740,45 +1631,21 @@ class RadiusMillDef(ToolDef):
         p7 = (srad, blen)
         p8 = (srad, oal)
         p9 = (0.0, oal)
-        pp = QPainterPath()
-        self.hasStep = bdia != sdia
-        rect = QRectF(QPointF(trad, r + flat),
-                      QPointF(trad + r * 2.0, flat - r))
-        # right side
-        pp.moveTo(*p1)
-        pp.lineTo(*p2)
-        pp.lineTo(*p3)
-        pp.arcMoveTo(rect, -180.0)
-        pp.arcTo(rect, -180.0, -90.0)
-        pp.lineTo(*p5)
-        if self.hasStep:
-            pp.lineTo(*p6)
-            pp.lineTo(*p7)
-        pp.lineTo(*p8)
-        pp.lineTo(*p9)
-        # left side
+        self._shankStep = cmp(sdia, bdia)
+        path2d = Path2d(p1)
+        path2d.lineTo(*p2)
+        path2d.lineTo(*p3)
+        path2d.arcTo(p4[0], p4[1], p3[0] + r, p3[1], 'clw')
+        path2d.lineTo(*p5)
+        path2d.lineTo(*p6)
+        if self._shankStep:
+            path2d.lineTo(*p7)
+        path2d.lineTo(*p8)
+        path2d.lineTo(*p9)
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         self.setPath(pp)
-        rc = rect.center()
-        if self.hasStep:
-            self._profile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'), p5, p6,
-                             p7, p8, p9]
-            if sdia > bdia:
-                self._cutterProfile = [p1, p2, p3, (p4, (rc.x(), rc.y()),
-                                                    'clw'),
-                                       p5, p6]
-                self._shankProfile = [p6, p7, p8, p9]
-            else:
-                self._cutterProfile = [p1, p2, p3, (p4, (rc.x(), rc.y()),
-                                                    'clw'),
-                                       p5, p6, p7]
-                self._shankProfile = [p7, p8, p9]
-        else:
-            self._profile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'), p5, p8,
-                            p9]
-            self._cutterProfile = [p1, p2, p3, (p4, (rc.x(), rc.y()), 'clw'),
-                                   p5, p6]
-            self._shankProfile = [p7, p8, p9]
+        self._profile = path2d
         return p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal, bdia, blen
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal,
                     bdia, blen):
@@ -1858,6 +1725,7 @@ class RadiusMillDef(ToolDef):
         self._updateCommentLabel(labelAbove, oal, tr.height())
         
 
+# TODO: put the neck relief dimensions in the tool definition map
 class DovetailMillDef(EndMillDef):
     """Define a basic dovetail end mill shape.
     specs:
@@ -1872,6 +1740,10 @@ class DovetailMillDef(EndMillDef):
         super(DovetailMillDef, self).__init__(specs)
         self.angleDim = AngleDim()
         self.angleDim.setToolTip("angle")
+    def cutterProfile(self):
+        return self.profile()[:4]
+    def shankProfile(self):
+        return self.profile()[-5:]
     def sceneChange(self, scene):
         super(DovetailMillDef, self).sceneChange(scene)
         if scene:
@@ -1911,25 +1783,21 @@ class DovetailMillDef(EndMillDef):
         p6 = (srad, flen * 1.5)
         p7 = (srad, oal)
         p8 = (0, oal)
-        pp = QPainterPath()
-        # right side
-        pp.moveTo(*p1)
-        pp.lineTo(*p2)
-        pp.lineTo(*p3)
-        pp.lineTo(*p4)
-        pp.lineTo(*p5)
-        pp.lineTo(*p6)
-        pp.lineTo(*p7)
-        pp.lineTo(*p8)
-        # left side
+        path2d = Path2d(p1)
+        path2d.lineTo(*p2)
+        path2d.lineTo(*p3)
+        path2d.lineTo(*p4)
+        path2d.lineTo(*p5)
+        path2d.lineTo(*p6)
+        path2d.lineTo(*p7)
+        path2d.lineTo(*p8)
+        pp = path2d.toQPainterPath()
         pp.addPath(mirTx.map(pp))
         # diagonal line to show flute
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(*p3)
         self.setPath(pp)
-        self._profile = [p1, p2, p3, p4, p5, p6, p7, p8]
-        self._cutterProfile = [p1, p2, p3, p4]
-        self._shankProfile = [p4, p5, p6, p7, p8]
+        self._profile = path2d
         return p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal, flen, a
     def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal,
                     flen, a):

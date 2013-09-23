@@ -6,12 +6,16 @@
 Sunday, September 15 2013
 """
 
+# NumPy
+# * linspace -- evenly spaced numbers over interval
+
 from math import pi, radians, degrees, sin, cos, sqrt
 
 # from PyQt4.QtOpenGL import *
 from PyQt4.QtGui import QVector2D, QVector3D
 from PyQt4.QtCore import QPointF
 import OpenGL.GL as gl
+import numpy as np
 
 from arc import Arc
 from bbox import BBox
@@ -317,6 +321,8 @@ class Mesh(object):
                 appended without any further checks or normal sums.
         """
         for vv in self._sharedVertices[-1::-1]:
+            #TODO: 
+            # if np.allclose(v, vv):
             if self.verticesEqual(v, vv):
                 break
         else:

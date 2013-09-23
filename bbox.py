@@ -6,6 +6,9 @@
 Monday, September 16 2013
 """
 
+import numpy as np
+
+
 class BBoxException(Exception):
     pass
 
@@ -32,61 +35,44 @@ class BBox(object):
 
         Where p2 > p1.
         """
-        if p1 == p2:
+        if np.allclose(p1, p2): # NUMPY: vector equality w/epsilon
             raise BBoxException('box has zero size')
-        if p1[0] >= p2[0]:
-            raise BBoxException('invalid x len {}'.format(_p2[0] - _p1[0]))
-        if p1[1] >= p2[1]:
-            raise BBoxException('invalid y len {}'.format(_p2[1] - _p1[1]))
-        if p1[2] >= p2[2]:
-            raise BBoxException('invalid z len {}'.format(_p2[2] - _p1[2]))
-        self._p1 = tuple(p1)
-        self._p2 = tuple(p2)
-        self._center = ((p1[0] + p2[0]) * 0.5,
-                        (p1[1] + p2[1]) * 0.5,
-                        (p1[2] + p2[2]) * 0.5)
+        if not np.all(p1 < p2): # NUMPY:
+            raise BBoxException('p1 must be < p2')
+        # [left bottom back,
+        #  right top front]
+        self._coords = np.array((p1, p2))
+        self._center = np.sum(self._coords, axis=0) * 0.5
     def p1(self):
-        return self._p1
+        return self._coords[0]
     def p2(self):
-        return self._p2
+        return self._coords[1]
     def center(self):
         """Return the center coordinate of this bounding box.
-
-        (x, y, z)
         """
         return self._center
-    def __str__(self):
-        return "[({}, {}, {}), ({}, {}, {})]" \
-            .format(self._p1[0], self._p1[1], self._p1[2],
-                    self._p2[0], self._p2[1], self._p2[2])
+    # def __str__(self):
+    #     return "[({}, {}, {}), ({}, {}, {})]" \
+    #         .format(self._p1[0], self._p1[1], self._p1[2],
+    #                 self._p2[0], self._p2[1], self._p2[2])
     @staticmethod
-    def fromVertices(vertices):
+    def fromVertices(vertices, m=None):
         """Create a coordinate-aligned BBox from the given list of vertices.
 
         vertices -- [(x, y, z), (x, y, z), ...]
+        m -- 4x4 numpy array
+
+        If m is supplied, find the bbox of the transformed vertices.
 
         Return a new BBox instance.
         """
-        p1 = [1e10, 1e10, 1e10]
-        p2 = [-1e10, -1e10, -1e10]
-        for x, y, z in vertices:
-            p1 = [min(x, p1[0]), min(y, p1[1]), min(z, p1[2])]
-            p2 = [max(x, p2[0]), max(y, p2[1]), max(z, p2[2])]
-        # expand the box for planar point sets
-        if p1[0] == p2[0]:
-            p1[0] -= .001
-            p2[0] += .001
-        if p1[1] == p2[1]:
-            p1[1] -= .001
-            p2[1] += .001
-        if p1[2] == p2[2]:
-            p1[2] -= .001
-            p2[2] += .001
+        p1 = np.min(vertices, axis=0)
+        p2 = np.max(vertices, axis=0)
         return BBox(p1, p2)
     def size(self):
-        """Return (x width , y height, z depth)
+        """Return [x width , y height, z depth]
         """
-        return (self.width(), self.height(), self.depth())
+        return np.apply_along_axis(np.diff, 0, self._coords)[0]
     def width(self):
         """Return the X length of the box.
         """
@@ -100,23 +86,31 @@ class BBox(object):
         """
         return self.zLen()
     def xLen(self):
-        return self._p2[0] - self._p1[0]
+        return self.size()[0]
     def yLen(self):
-        return self._p2[1] - self._p1[1]
+        return self.size()[1]
     def zLen(self):
-        return self._p2[2] - self._p1[2]
+        return self.size()[2]
     def left(self):
-        return self._p1[0]
+        return self._coords[0, 0]
     def right(self):
-        return self._p2[0]
-    def top(self):
-        return self._p2[1]
+        return self._coords[1, 0]
     def bottom(self):
-        return self._p1[1]
-    def front(self):
-        return self._p2[2]
+        return self._coords[0, 1]
+    def top(self):
+        return self._coords[1, 1]
     def back(self):
-        return self._p1[2]
+        return self._coords[0, 2]
+    def front(self):
+        return self._coords[1, 2]
+    def leftTop(self):
+        return np.array([self.left(), self.top()])
+    def leftBottom(self):
+        return np.array([self.left(), self.bottom()])
+    def rightBottom(self):
+        return np.array([self.right(), self.bottom()])
+    def rightTop(self):
+        return np.array([self.right(), self.top()])
     def vertices(self):
         """Return a list of of the boxes corner points.
         
@@ -135,12 +129,12 @@ class BBox(object):
         bottom = self.bottom()
         front = self.front()
         back = self.back()
-        return ((left, front, bottom),
-                (right, front, bottom),
-                (right, front, top),
-                (left, front, top),
-                (left, back, bottom),
-                (right, back, bottom),
-                (right, back, top),
-                (left, back, top))
+        return np.array(((left, front, bottom),
+                         (right, front, bottom),
+                         (right, front, top),
+                         (left, front, top),
+                         (left, back, bottom),
+                         (right, back, bottom),
+                         (right, back, top),
+                         (left, back, top)))
                 

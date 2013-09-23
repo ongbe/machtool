@@ -11,6 +11,7 @@ from PyQt4.QtCore import *
 from PyQt4.QtCore import Qt as qt
 from PyQt4.QtOpenGL import *
 import OpenGL.GL as gl
+import numpy as np
 
 from glview import GLView
 from bbox import BBox
@@ -23,6 +24,7 @@ class MeshView(GLView):
         self._mesh = None
         # copy of GLView.rotFactor
         self.baseRotFactor = self.rotFactor
+        self._shadeMode = 'smooth'
     def wheelEvent(self, e):
         """Zoom in/out and adjust the mouse rotation factor.
         """
@@ -55,6 +57,12 @@ class MeshView(GLView):
     def setMesh(self, mesh):
         self._mesh = mesh
         self.setRotCenter(mesh.bbox().center())
+        if self._shadeMode == 'smooth':
+            self._mesh.setSmoothShaded()
+        elif self._shadeMode == 'flat':
+            self._mesh.setFlatShaded()
+        else:
+            self._mesh.setWireFrame()
     def createContextMenu(self):
         a = QAction("Fit", self)
         self.connect(a, SIGNAL('triggered()'), self.fitMesh)
@@ -67,23 +75,21 @@ class MeshView(GLView):
         for a in [x for x in self.actions()
                   if x.text() in ['Left', 'Right', 'Back']]:
             self.removeAction(a)
-    # TODO: This works but QMatrix4x4 * v does not.
     def mxv(self, m, v):
         """Multiply matrix and vector.
 
         m -- 4x4 matrix
-        v -- [x, y, z]
+        v -- [x, y, z, 1.0]
 
-        Return the mapped [x, y, z].
+        Return the mapped [x, y, z, 1.0].
         """
-        vv = v + [1.0]
-        out = [0.0, 0.0, 0.0, 0.0]
-        for r in range(4):
+        out = np.zeros(4)
+        for r in (0, 1, 2, 3):
             result = 0.0
-            for c in range(4):
-                result += vv[c] * m[c][r]
+            for c in (0, 1, 2, 3):
+                result += v[c] * m[c, r]
             out[r] = result
-        return out[:3]
+        return out
     # TODO: The mesh's bounding box vertices are transformed by the current
     #       model view matrix. The bounding box of those points is used to fit
     #       the tool. This isn't as accurate as using the meshes vertices but
@@ -107,16 +113,21 @@ class MeshView(GLView):
         """
         mappedVerts = []
         for meshVert in self._mesh.sharedVertices():
-            v = self.mxv(self.modelviewMatrix, meshVert)
-            mappedVerts.append(v)
-        return BBox.fromVertices(mappedVerts)
+            # mv = np.array(meshVert + [1.0])
+            # nm = self.modelviewMatrix * mv
+            # diag = nm.diagonal()
+            # v = diag[:3]
+            mappedVerts.append(self.mxv(self.modelviewMatrix,
+                                        meshVert + [1.0])[:3])
+            # mappedVerts.append(self.mxv(self.modelviewMatrix, meshVert))
+        bbox = BBox.fromVertices(mappedVerts)
+        return bbox
     def fitMesh(self):
         if self._mesh is None:
             return
         bbox = self.getMeshSceneBBox()
         # fit calls updateGL()
-        self.fit(QPointF(bbox.left(), bbox.top()),
-                 QPointF(bbox.right(), bbox.bottom()))
+        self.fit(bbox.leftTop(), bbox.rightBottom())
         self._setRotFactor()
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
@@ -128,35 +139,30 @@ class MeshView(GLView):
     def bottomView(self, update=False):
         super(MeshView, self).bottomView(update)
         self.fitMesh()
-    def rightView(self, update=False):
-        super(MeshView, self).rightView(update)
-        self.fitMesh()
-    def leftView(self, update=False):
-        super(MeshView, self).leftView(update)
-        self.fitMesh()
     def frontView(self, update=False):
         super(MeshView, self).frontView(update)
-        self.fitMesh()
-    def backView(self, update=False):
-        super(MeshView, self).backView(update)
         self.fitMesh()
     def isometricView(self, update=False):
         super(MeshView, self).isometricView(update)
         self.fitMesh()
     def keyPressEvent(self, e):
+        if self._mesh is None:
+            super(MeshView, self).keyPressEvent(e)
+            return
         if e.key() == qt.Key_F:
             self.fitMesh()
         if e.key() == qt.Key_W:
+            self._shadeMode = 'wire'
             self._mesh.setWireFrame()
             self.updateGL()
         if e.key() == qt.Key_S:
+            self._shadeMode = 'smooth'
             self._mesh.setSmoothShaded()
             self.updateGL()
         if e.key() == qt.Key_T:
+            self._shadeMode = 'flat'
             self._mesh.setFlatShaded()
             self.updateGL()
-        else:
-            super(MeshView, self).keyPressEvent(e)
     # def mouseMoveEvent(self, e):
     #     super(MeshView, self).mouseMoveEvent(e)
     #     print 'pos', self.screenToScene(e.x(), e.y())
