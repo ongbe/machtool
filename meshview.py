@@ -146,23 +146,26 @@ class MeshView(GLView):
         super(MeshView, self).isometricView(update)
         self.fitMesh()
     def keyPressEvent(self, e):
-        if self._mesh is None:
-            super(MeshView, self).keyPressEvent(e)
-            return
-        if e.key() == qt.Key_F:
-            self.fitMesh()
-        if e.key() == qt.Key_W:
-            self._shadeMode = 'wire'
-            self._mesh.setWireFrame()
-            self.updateGL()
-        if e.key() == qt.Key_S:
-            self._shadeMode = 'smooth'
-            self._mesh.setSmoothShaded()
-            self.updateGL()
-        if e.key() == qt.Key_T:
-            self._shadeMode = 'flat'
-            self._mesh.setFlatShaded()
-            self.updateGL()
+        if self._mesh:
+            if e.key() == qt.Key_F:
+                self.fitMesh()
+                return
+            elif e.key() == qt.Key_W:
+                self._shadeMode = 'wire'
+                self._mesh.setWireFrame()
+                self.updateGL()
+                return
+            elif e.key() == qt.Key_S:
+                self._shadeMode = 'smooth'
+                self._mesh.setSmoothShaded()
+                self.updateGL()
+                return
+            elif e.key() == qt.Key_T:
+                self._shadeMode = 'flat'
+                self._mesh.setFlatShaded()
+                self.updateGL()
+                return
+        super(MeshView, self).keyPressEvent(e)
     # def mouseMoveEvent(self, e):
     #     super(MeshView, self).mouseMoveEvent(e)
     #     print 'pos', self.screenToScene(e.x(), e.y())

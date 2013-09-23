@@ -293,15 +293,18 @@ class ToolDef(QGraphicsPathItem):
         """Update the tool's specifications.
 
         specs -- dict
+
+        if something changed, update the tool profile. The dimensions are
+        always updated.
         """
         self.prepareGeometryChange()
-        # Check if anything changed.
         for k, v in specs.iteritems():
             if self.specs[k] != v:
                 self.dirty = True
                 self.specs.update(copy(specs))
+                self._updateProfile()
                 break
-        self._updateDims(*self._updateProfile())
+        self._updateDims()
     # TODO: The default sceneBoundingRect() will not work because the pen is
     #       cosmetic with a width of 2. Probably still not correct, but it
     #       works ok for now.
@@ -457,12 +460,19 @@ class DrillDef(ToolDef):
         pp.moveTo(-p2[0], p2[1])
         pp.lineTo(p3[0], p3[1])
         self.setPath(pp)
-        return [p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen, sdia, flen]
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, angle, dia, oal, tiplen,
-                    sdia, flen):
+    def _updateDims(self):
+        oal = self.specs['oal']
+        flen = self.specs['fluteLength']
+        dia = self.specs['dia']
+        sdia = self.specs['shankDia']
+        angle = self.specs['angle']
+        metric = self.specs['metric']
+        if self._shankStep:
+            p1, p2, p3, p4, p5, _ = self._profile.endPoints()
+        else:
+            p1, p2, p3, p5, _ = self._profile.endPoints()
         # tip angle dimension
         tr = self.angleDim.dimText.sceneBoundingRect()
-        angle = self.specs['angle']
         labelYfactor = 2.0
         if angle <= 135.0:
             labelYfactor = 1.0
@@ -483,7 +493,6 @@ class DrillDef(ToolDef):
         labelP = QPointF(-p2[0] - tr.width(), p2[1] + tr.height() * .5)
         if ar.width() * 2.1 < dia:
             outside = False
-        metric = self.specs['metric']
         self.diaDim.config({'value': dia,
                             'ref1': QPointF(-p2[0], p2[1]),
                             'ref2': QPointF(*p2),
@@ -615,9 +624,10 @@ class CenterDrillDef(ToolDef):
         self._profile = path2d
         # for dim validation
         self.minOAL = p4[1]
-        return p1, p5, oal
-    def _updateDims(self, p1, p5, oal):
+    def _updateDims(self):
         metric = self.specs['metric']
+        oal = self.specs['oal']
+        p1, _, _, _, p5, _ = self._profile.endPoints()
         # OAL dimension
         tr = self.oalDim.dimText.sceneBoundingRect()
         ar = self.oalDim.arrow1.sceneBoundingRect()
@@ -723,11 +733,19 @@ class EndMillDef(ToolDef):
         pp.lineTo(*p3)
         self.setPath(pp)
         self._profile = path2d
-        return p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen):
+        # return p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen
+    def _updateDims(self):
         """Attempt to intelligently position the dimensions and name label.
         """
         metric = self.specs['metric']
+        dia = self.specs['dia']
+        sdia = self.specs['shankDia']
+        flen = self.specs['fluteLength']
+        oal = self.specs['oal']
+        if self._shankStep:
+            p1, p2, p3, p4, p5, p6 = self._profile.endPoints()
+        else:
+            p1, p2, p3, p5, p6 = self._profile.endPoints()
         # flute diameter dimension
         self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, None, -.75,
                            metric)
@@ -882,12 +900,21 @@ class TaperEndMillDef(ToolDef):
         pp.lineTo(*p3)
         self.setPath(pp)
         self._profile = path2d
-        return p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen, a
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen,
-                    a):
+        # return p1, p2, p3, p4, p5, p6, dia, sdia, srad, oal, flen, a
+    def _updateDims(self):
         """Attempt to intelligently position the dimensions and name label.
         """
         metric = self.specs['metric']
+        sdia = self.specs['shankDia']
+        srad = sdia * 0.5
+        dia = self.specs['dia']
+        flen = self.specs['fluteLength']
+        oal = self.specs['oal']
+        a = self.specs['angle']
+        if self._shankStep:
+            p1, p2, p3, p4, p5, p6 = self._profile.endPoints()
+        else:
+            p1, p2, p3, p5, p6 = self._profile.endPoints()
         # flute diameter dimension
         self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, None, -.75,
                            metric)
@@ -1024,12 +1051,21 @@ class TaperBallMillDef(TaperEndMillDef):
         pp.lineTo(*p3)
         self.setPath(pp)
         self._profile = path2d
-        return p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal, flen, a
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, frad, sdia, srad, oal,
-                    flen, a):
+    def _updateDims(self):
         """Attempt to intelligently position the dimensions and name label.
         """
         metric = self.specs['metric']
+        sdia = self.specs['shankDia']
+        srad = sdia * 0.5
+        dia = self.specs['dia']
+        frad = dia * 0.5
+        flen = self.specs['fluteLength']
+        oal = self.specs['oal']
+        a = self.specs['angle']
+        if self._shankStep:
+            p1, p2, p3, p4, p5, p6 = self._profile.endPoints()
+        else:
+            p1, p2, p3, p5, p6 = self._profile.endPoints()
         # flute diameter dimension (actually a RadiusDim)
         tr = self.diaDim.dimText.sceneBoundingRect()
         labelP = QPointF(-p2[0] - tr.width(), tr.height() * -1.0)
@@ -1160,11 +1196,18 @@ class BallMillDef(EndMillDef):
         pp.lineTo(*p3)
         self.setPath(pp)
         self._profile = path2d
-        return p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, dia, sdia, oal, flen):
+    def _updateDims(self):
         """Attempt to intelligently position the dimensions and name label.
         """
         metric = self.specs['metric']
+        dia = self.specs['dia']
+        sdia = self.specs['shankDia']
+        flen = self.specs['fluteLength']
+        oal = self.specs['oal']
+        if self._shankStep:
+            p1, p2, p3, p4, p5, _ = self._profile.endPoints()
+        else:
+            p1, p2, p3, p5, _ = self._profile.endPoints()
         # flute diameter dimension
         self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, 0.0, -.75,
                            metric)
@@ -1227,8 +1270,8 @@ class BallMillDef(EndMillDef):
                             'force': 'vertical'})
         # comment label
         self._updateCommentLabel(labelAbove, oal, tr.height())
-        
-        
+
+
 class BullMillDef(EndMillDef):
     """Define a basic bull end mill shape.
     specs:
@@ -1296,12 +1339,19 @@ class BullMillDef(EndMillDef):
         pp.lineTo(*p4)
         self.setPath(pp)
         self._profile = path2d
-        return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen, r
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, flen,
-                    r):
+    def _updateDims(self):
         """Attempt to intelligently position the dimensions and name label.
         """
         metric = self.specs['metric']
+        dia = self.specs['dia']
+        sdia = self.specs['shankDia']
+        flen = self.specs['fluteLength']
+        oal = self.specs['oal']
+        radius = self.specs['radius']
+        if self._shankStep:
+            _, p2, p3, p4, p5, p6, _ = self._profile.endPoints()
+        else:
+            _, p2, p3, p4, p6, _ = self._profile.endPoints()
         # dia dimensions
         self._updateDiaDim(self.diaDim, [-p3[0], p3[1]], p3, dia, 0.0, -.75,
                            metric)
@@ -1365,11 +1415,11 @@ class BullMillDef(EndMillDef):
         # corner radius dimension
         tr = self.radiusDim.dimText.sceneBoundingRect()
         arc = Arc({'center': QPointF(p2[0], p3[1]),
-                   'radius': r,
+                   'radius': radius,
                    'start': 270.0,
                    'span': 90.0})
         labelP = QPointF(-p3[0] - tr.width() * .6, (p3[1] + p4[1]) * .5)
-        self.radiusDim.config({'value': r,
+        self.radiusDim.config({'value': radius,
                                'pos': labelP,
                                'arc': arc,
                                'outside': True,
@@ -1479,10 +1529,17 @@ class WoodruffMillDef(ToolDef):
         pp.lineTo(p3[0], p3[1])
         self.setPath(pp)
         self._profile = path2d
-        return p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia, flen
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, oal, ndia,
-                    flen):
+    def _updateDims(self):
         metric = self.specs['metric']
+        dia = self.specs['dia']
+        sdia = self.specs['shankDia']
+        flen = self.specs['fluteLength']
+        oal = self.specs['oal']
+        ndia = self.specs['neckDia']
+        if self._shankStep:
+            _, p2, p3, p4, _, p6, _ = self._profile.endPoints()
+        else:
+            _, p2, p3, p4, p6, _ = self._profile.endPoints()
         # dia dimension
         self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, None, -.75,
                            metric)
@@ -1646,10 +1703,18 @@ class RadiusMillDef(ToolDef):
         pp.addPath(mirTx.map(pp))
         self.setPath(pp)
         self._profile = path2d
-        return p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal, bdia, blen
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, p8, p9, tdia, sdia, oal,
-                    bdia, blen):
+    def _updateDims(self):
         metric = self.specs['metric']
+        sdia = self.specs['shankDia']
+        bdia = self.specs['bodyDia']
+        tdia = self.specs['tipDia']
+        blen = self.specs['bodyLength']
+        radius = self.specs['radius']
+        oal = self.specs['oal']
+        if self._shankStep:
+            _, p2, p3, p4, p5, p6, p7, p8, _ = self._profile.endPoints()
+        else:
+            _, p2, p3, p4, p5, p6, p8, _ = self._profile.endPoints()
         # tip dia dimension
         self._updateDiaDim(self.tipDiaDim, [-p2[0], p2[1]], p2, tdia, None,
                            -.75, metric)
@@ -1663,7 +1728,11 @@ class RadiusMillDef(ToolDef):
         bltr = self.bodyLengthDim.dimText.sceneBoundingRect()
         ar = self.bodyLengthDim.arrow1.sceneBoundingRect()
         outside = True
-        bLabelX = max(p6[0], p7[0]) + bltr.width() * .6
+        ref2 = QPointF(*p6)
+        bLabelX = p6[0] + bltr.width() * .6
+        if self._shankStep > 0:
+            ref2 = QPointF(*p7)
+            bLabelX = p7[0] + bltr.width() * .6
         # label inside witness lines
         if bltr.height() * 1.1 < p6[1]:
             fLabelP = QPointF(bLabelX, p6[1] * 0.5)
@@ -1676,7 +1745,7 @@ class RadiusMillDef(ToolDef):
                 outside = False
         self.bodyLengthDim.config({'value': blen,
                                    'ref1': QPointF(*p2),
-                                   'ref2': QPointF(*max(p6, p7)),
+                                   'ref2': ref2,
                                    'outside': outside,
                                    'format': FMTMM if metric else FMTIN,
                                    'pos': fLabelP,
@@ -1709,13 +1778,12 @@ class RadiusMillDef(ToolDef):
                             'force': 'vertical'})
         # corner radius dimension
         tr = self.radiusDim.dimText.sceneBoundingRect()
-        r = self.specs['radius']
         arc = Arc({'center': QPointF(p4[0], p3[1]),
-                   'radius': r,
+                   'radius': radius,
                    'start': 90.0,
                    'span': 90.0})
         labelP = QPointF(-p6[0] - tr.width() * .6, (p6[1] + p5[1]) * .5)
-        self.radiusDim.config({'value': r,
+        self.radiusDim.config({'value': radius,
                                'pos': labelP,
                                'arc': arc,
                                'outside': True,
@@ -1798,12 +1866,16 @@ class DovetailMillDef(EndMillDef):
         pp.lineTo(*p3)
         self.setPath(pp)
         self._profile = path2d
-        return p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal, flen, a
-    def _updateDims(self, p1, p2, p3, p4, p5, p6, p7, dia, sdia, srad, oal,
-                    flen, a):
+    def _updateDims(self):
         """Attempt to intelligently position the dimensions and name label.
         """
         metric = self.specs['metric']
+        oal = self.specs['oal']
+        flen = self.specs['fluteLength']
+        dia = self.specs['dia']
+        sdia = self.specs['shankDia']
+        angle = self.specs['angle']
+        _, p2, p3, _, _, _, p7, _ = self._profile.endPoints()
         # flute diameter dimension
         self._updateDiaDim(self.diaDim, [-p2[0], p2[1]], p2, dia, None, -.75,
                            metric)
@@ -1871,7 +1943,7 @@ class DovetailMillDef(EndMillDef):
         # bottom edge vector
         v2 = QVector2D(qp4 - qp3)
         labelP = QPointF(qp2.x() - tr.width() * 1.5, tr.height() * 1.5)
-        self.angleDim.config({'value': self.specs['angle'],
+        self.angleDim.config({'value': angle,
                               'pos': labelP,
                               'line1': QLineF(qp1, qp2),
                               'line2': QLineF(qp3, qp4),

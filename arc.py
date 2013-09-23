@@ -96,7 +96,7 @@ class Arc(object):
         span = self.m['span']
         if abs(span) == 360.0:
             raise ArcException('Arc of 360 degrees has no bisector')
-        a = radians(self.m['start'] + self.m['span'] / 2.0)
+        a = radians(self.m['start'] + span / 2.0)
         return QVector2D(cos(a), sin(a))
     @staticmethod
     def fromAngles(a1, a2, radius, cclw=True):
