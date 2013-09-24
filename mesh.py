@@ -27,12 +27,13 @@ def windowItr(seq, sz, step):
     for i in range(0, n * step, step):
         yield seq[i:i+sz]
 
+
 class Patch(object):
     """A section of a Mesh.
 
     Smooth normals are computed per patch. This results in sharp edges between
-    non-tangent patches. Each patch contains a start index into its parent
-    mesh's vertices.
+    non-tangent patches. Each patch contains a list of indices into into its
+    parent mesh's vertices.
     """
     def __init__(self, mesh):
         """Initialize a Patch
@@ -50,6 +51,17 @@ class Patch(object):
         self._color = [0.1, 0.1, 0.7, 1.0]
         # 'wire', 'flat', or 'smooth'
         self._surfaceMode = 'smooth'
+        # DEBUG:
+        self._showNormals = False
+    def toggleNormals(self, state=None):
+        """Show surface normals
+
+        state -- True, False, or None, if None toggle the current state.
+        """
+        if state is None:
+            self._showNormals = not self._showNormals
+        else:
+            self._showNormals = state
     def setColor(self, color):
         self._color = color
     def setWireFrame(self):
@@ -69,7 +81,7 @@ class Patch(object):
                    The three vertices, given in CCLW winding order.
         apexVertex -- [x, y, z]
                       The apex vertice, for a cone tip. Must be the same as a,
-                      b, or c, or None.
+                      b, c, or None.
 
         Return None.
         """
@@ -91,15 +103,15 @@ class Patch(object):
         a, b, c, d -- [x, y, z]
 
         The quad is split into two triangles and added. The points must be
-        given in cclw winding order.
+        given in cclw winding order. Start point does not matter.
 
-        c o---o b
+        d o---o c
           |  /|
           | / |
-        d o---o a
+        a o---o b
         """
         self.addTri(a, b, c)
-        self.addTri(a, c, d)
+        self.addTri(d, a, c)
     def addRevLineSeg(self, x1, z1, x2, z2):
         """Add a 360 degree revolved line to this Patch.
 
@@ -111,20 +123,20 @@ class Patch(object):
         point (0, 0, 0).
         """
         # tip triangles
-        if x1 == 0.0:
-            a = [float(x1), 0.0, float(z1)]
+        if np.allclose(x1, 0.0):
+            a = [x1, 0.0, z1]
             for (sa1, ca1), (sa2, ca2) in self._mesh.sincos:
                 r = x2
                 b = [r * ca2, r * sa2, z2]
                 c = [r * ca1, r * sa1, z2]
-                self.addTri(a, b, c, None if z1 == z2 else a)
+                self.addTri(a, b, c, None if np.allclose(z1, z2) else a)
         # shank end triangle fan, p1 = top center
-        elif x2 == 0.0:
-            a = [float(x2), 0.0, float(z2)]
+        elif np.allclose(x2, 0.0):
+            a = [x2, 0.0, z2]
             for (sa1, ca1), (sa2, ca2) in self._mesh.sincos:
                 b = [x1 * ca1, x1 * sa1, z1]
                 c = [x1 * ca2, x1 * sa2, z1]
-                self.addTri(a, b, c, None if z1 == z2 else a)
+                self.addTri(a, b, c, None if np.allclose(z1, z2) else a)
         # triangle strip
         # d o--o c
         #   | /|
@@ -132,10 +144,10 @@ class Patch(object):
         # a o--o b
         else:
             for (sa1, ca1), (sa2, ca2) in self._mesh.sincos:
-                self.addQuad([x1 * ca1, x1 * sa1, z1],
-                             [x1 * ca2, x1 * sa2, z1],
-                             [x2 * ca2, x2 * sa2, z2],
-                             [x2 * ca1, x2 * sa1, z2])
+                self.addQuad([x1 * ca1, x1 * sa1, z1], # a
+                             [x1 * ca2, x1 * sa2, z1], # b
+                             [x2 * ca2, x2 * sa2, z2], # c
+                             [x2 * ca1, x2 * sa1, z2]) # d
     def addRevArcSeg(self, x1, z1, x2, z2, cx, cz, arcDir):
         """Add a 360 degree revolved arc to this Patch.
 
@@ -157,7 +169,7 @@ class Patch(object):
                               arcDir == 'cclw')
         # TODO: By halving the mesh segs ( * 0.5), fewer triangles are
         #       created. Shading is ok but arc edges look blocky.
-        angstep = 360.0 / (self._mesh.segs * 0.5)
+        # angstep = 360.0 / (self._mesh.segs * 0.5)
         angstep = 360.0 / self._mesh.segs
         # minimum 2 segments in the arc
         segs = max(int(abs(arc.span()) / angstep), 3)
@@ -181,6 +193,7 @@ class Patch(object):
             if i == 1:
                 # only blend the first strip
                 self._mesh.blendTangent(False)
+        # last strip
         else:
             a2 = radians(arc.endAngle())
             x1 = cx + r * ca1
@@ -188,6 +201,22 @@ class Patch(object):
             x2 = cx + r * cos(a2)
             z2 = cz + r * sin(a2)
             self.addRevLineSeg(x1, z1, x2, z2)
+    # DEBUG:
+    def renderNormals(self):
+        gl.glDisable(gl.GL_LIGHTING)
+        gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
+        gl.glDisable(gl.GL_LINE_SMOOTH)
+        gl.glColor(0, 1, 0, 1)
+        gl.glBegin(gl.GL_LINES)
+        factor = max(*self._mesh._bbox.size()) * 0.01
+        for i in self._indices:
+            v = self._mesh._vertices[i]
+            n = self._mesh._normals[i]
+            ep = QVector3D(*v) + QVector3D(*n) * factor
+            gl.glVertex3f(*v)
+            gl.glVertex3f(ep.x(), ep.y(), ep.z())
+        gl.glEnd()
+        gl.glEnable(gl.GL_LINE_SMOOTH)
     def render(self):
         """Render this Patch.
         """
@@ -204,6 +233,7 @@ class Patch(object):
         elif self._surfaceMode == 'wire':
             gl.glDisable(gl.GL_LIGHTING)
             gl.glPolygonMode(gl.GL_FRONT_AND_BACK, gl.GL_LINE)
+            gl.glDisable(gl.GL_LINE_SMOOTH)
             gl.glColor(*self._color)
         elif self._surfaceMode == 'flat':
             gl.glEnable(gl.GL_LIGHTING)
@@ -216,6 +246,8 @@ class Patch(object):
             gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SHININESS, 128)
         gl.glDrawElements(gl.GL_TRIANGLES, self._nTris * 3,
                           gl.GL_UNSIGNED_INT, self._indices)
+        if self._showNormals:
+            self.renderNormals()
     @staticmethod
     def fromRevLineSeg(x1, z1, x2, z2, mesh):
         """Create a revolved Patch from a line segment.
@@ -257,12 +289,19 @@ class Mesh(object):
         self._normals = []
         # [x, y, z], the unique set of all vertices, for bbox calc
         self._sharedVertices = []
-        # integer, self.vertices count
+        # integer, self._vertices count
         self._nVertices = 0
         # if true, include the previous patches vertices when summing normals
-        self._prevStartIndex = 1e10
+        self._prevPatchStartIndex = 1e10
         # vertice bounding box
         self._bbox = None
+    def toggleNormals(self, state=None):
+        """Show surface normals.
+
+        state -- True, False, or None, if None toggle the current state.
+        """
+        for patch in self._patches:
+            patch.toggleNormals(state)
     def setColor(self, color):
         """Set the color for all child patches.
 
@@ -293,9 +332,9 @@ class Mesh(object):
         This will create the correct normals between tangent patches.
         """
         if blend and self._patches:
-            self._prevStartIndex = self._patches[-1].startIndex()
+            self._prevPatchStartIndex = self._patches[-1].startIndex()
         else:
-            self._prevStartIndex = 1e10
+            self._prevPatchStartIndex = 1e10
     def verticesEqual(self, v1, v2, eps=1e-8):
         """Return True if the vertices are equal.
 
@@ -309,6 +348,11 @@ class Mesh(object):
         if abs(v1[2] - v2[2]) > eps:
             return False
         return True
+    # TODO: The calculated normals look ok but they're not really accurate.
+    #       This function does not know if two triangles share an edge. When a
+    #       quad is added to the mesh, its two triangles are co-planar. If
+    #       those two triangles share a vertex with another non-co-planar
+    #       triangle, the normal will be biased towards the quad.
     def addVertex(self, v, n, startIndex, apex=False):
         """Add the vertex and associated normal.
 
@@ -321,25 +365,21 @@ class Mesh(object):
                 appended without any further checks or normal sums.
         """
         for vv in self._sharedVertices[-1::-1]:
-            #TODO: 
-            # if np.allclose(v, vv):
             if self.verticesEqual(v, vv):
                 break
         else:
             self._sharedVertices.append(v)
         if not apex:
-            startIndex = min(startIndex, self._prevStartIndex)
+            # blend with the previous patch?
+            startIndex = min(startIndex, self._prevPatchStartIndex)
             i = self._nVertices - 1
             while i >= startIndex:
-                # if self._vertices[i] == v:
-                if self.verticesEqual(self._vertices[i], v): 
+                if self.verticesEqual(self._vertices[i], v):
                     # vertex found
                     # sum its normal with the duplicate vertex's normal
                     nn = QVector3D(*self._normals[i])
                     nn += QVector3D(*n)
                     nn.normalize()
-                    # if v[0] == 0.0 and v[1] == 0.0:
-                    #     print nn
                     self._normals[i] = [nn.x(), nn.y(), nn.z()]
                     return i
                 i -= 1
@@ -365,10 +405,10 @@ class Mesh(object):
     def render(self):
         """Render all the patches.
         """
-        gl.glVertexPointer(3, gl.GL_DOUBLE, 0, self._vertices);
-        gl.glNormalPointer(gl.GL_FLOAT, 0, self._normals);
         gl.glEnableClientState(gl.GL_VERTEX_ARRAY);
         gl.glEnableClientState(gl.GL_NORMAL_ARRAY);
+        gl.glVertexPointer(3, gl.GL_DOUBLE, 0, self._vertices);
+        gl.glNormalPointer(gl.GL_DOUBLE, 0, self._normals);
         for patch in self._patches:
             patch.render()
         gl.glDisableClientState(gl.GL_VERTEX_ARRAY);
@@ -395,7 +435,7 @@ def getSinCosCache(nSegs):
     return map(lambda x: ((sin(x[0]), cos(x[0])),
                           (sin(x[1]), cos(x[1]))),
                windowItr(rangs, 2, 1))
-        
+
 
 class RevolvedMesh(Mesh):
     """A 360 degree surface of revolution.
@@ -443,7 +483,7 @@ class RevolvedMesh(Mesh):
         p = QPointF(px, py)
         v1 = QVector2D(p - QPointF(cx1, cy1)).normalized()
         v2 = QVector2D(p - QPointF(cx1, cy1)).normalized()
-        if abs(v1.dotProduct(v1, v2)) <= 1e-6:
+        if abs(v1.dotProduct(v1, v2)) - 1.0 <= 1e-6:
             # TODO: handle case where arc turns back into the other arc
             return True
         else:
@@ -458,7 +498,7 @@ class RevolvedMesh(Mesh):
                  equal to the start or end point Z.
         """
         if close:
-            e1 = profile[0]     # will always be a point
+            e1 = profile[0]     # should always be a point
             if e1[0] != 0.0:
                 profile = [(0.0, e1[1])] + profile
             e2 = profile[-1]
@@ -510,7 +550,6 @@ class RevolvedMesh(Mesh):
                 px1 = aex
                 py1 = aey
             # arc -> arc
-            # TODO: untested, no tool defined with this geometry
             else:
                 (x1, y1), (cx1, cy1), d1 = e1
                 (x2, y2), (cx2, cy2), d2 = e2

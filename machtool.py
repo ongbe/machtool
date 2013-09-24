@@ -12,7 +12,10 @@ from PyQt4.QtCore import *
 from PyQt4.QtCore import Qt as qt
 from tooldefwidget import ToolDefWidget
 from meshview import MeshView
+
+# DEBUG:
 from mesh import RevolvedMesh
+from path2d import Path2d
 
 
 class MainWindow(QMainWindow):
@@ -58,16 +61,18 @@ class MainWindow(QMainWindow):
             toolBrowser.saveToolMap()
         e.accept()
     def keyPressEvent(self, e):
-        # TODO: temp debug
+        # DEBUG:
         from math import sin, cos, radians
         if e.key() == qt.Key_Space:
             mesh = RevolvedMesh()
-            r = 1
-            rads = radians(-45)
-            x = r * cos(rads)
-            y = r + r * sin(rads)
-            mesh.addProfile([(0, 0), [(x, y), (0, r), 'cclw']],
-                             close=True)
+            p = Path2d([0, 0])
+            p.arcTo(1, 1, 0, 1, 'cclw')
+            p.arcTo(2, 2, 2, 1, 'clw')
+            p.arcTo(3, 3, 2, 3, 'cclw')
+            p.lineTo(2, 3.5)
+            p.lineTo(1.5, 3.5)
+            p.arcTo(1.0, 3., 1.5, 3, 'cclw')
+            mesh.addProfile(p.elements(), close=True)
             self.meshview.setMesh(mesh)
             self.meshview.fitMesh()
             

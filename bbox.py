@@ -72,7 +72,10 @@ class BBox(object):
     def size(self):
         """Return [x width , y height, z depth]
         """
-        return np.apply_along_axis(np.diff, 0, self._coords)[0]
+        return [self._coords[1][0] - self._coords[0][0],
+                self._coords[1][1] - self._coords[0][1],
+                self._coords[1][2] - self._coords[0][2]]
+        # return np.apply_along_axis(np.diff, 0, self._coords)[0]
     def width(self):
         """Return the X length of the box.
         """

@@ -25,6 +25,7 @@ class MeshView(GLView):
         # copy of GLView.rotFactor
         self.baseRotFactor = self.rotFactor
         self._shadeMode = 'smooth'
+        self._showNormals = False
     def wheelEvent(self, e):
         """Zoom in/out and adjust the mouse rotation factor.
         """
@@ -63,6 +64,7 @@ class MeshView(GLView):
             self._mesh.setFlatShaded()
         else:
             self._mesh.setWireFrame()
+        self._mesh.toggleNormals(self._showNormals)
     def createContextMenu(self):
         a = QAction("Fit", self)
         self.connect(a, SIGNAL('triggered()'), self.fitMesh)
@@ -150,6 +152,10 @@ class MeshView(GLView):
             if e.key() == qt.Key_F:
                 self.fitMesh()
                 return
+            if e.key() == qt.Key_N:
+                self._showNormals = not self._showNormals
+                self._mesh.toggleNormals(self._showNormals)
+                self.updateGL()
             elif e.key() == qt.Key_W:
                 self._shadeMode = 'wire'
                 self._mesh.setWireFrame()

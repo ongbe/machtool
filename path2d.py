@@ -29,6 +29,11 @@ class Path2d(object):
     point followed by a point.
     """
     def __init__(self, startPoint=None):
+        """Initialize the path.
+
+        startPoint -- [x, y] If not supplied, moveTo must be called before
+                             adding lines or arcs.
+        """
         self._elements = []
         if startPoint:
             self._elements.append(startPoint)
@@ -38,6 +43,12 @@ class Path2d(object):
             return 'Path2D[' + elmstr + ']'
         else:
             return 'Path2D[]'
+    def isValid(self):
+        """Return True if the path has at least two elements.
+
+        The first must be a point.
+        """
+        return len(self._elements) >= 2 and len(self._elements[0]) == 2
     def elements(self):
         """Return a list of path elements.
 
@@ -67,6 +78,8 @@ class Path2d(object):
     def arcTo(self, endX, endY, centerX, centerY, arcDir):
         """Add an arc to the path.
 
+        arcDir -- 'cclw' or 'clw'
+
         If the path is empty raise Path2dException.
         """
         if self.isEmpty():
@@ -75,15 +88,20 @@ class Path2d(object):
                                [centerX, centerY],
                                arcDir])
     def endPoints(self):
-        """Return a list of all line and arc end points, in order
+        """Return a list of all line and arc end points, in order.
         """
         return [e if len(e) == 2 else e[0] for e in self._elements]
     def toQPainterPath(self):
         """Return a QPainterPath containing all segments of this path.
         """
+        if not self.isValid():
+            raise Path2dException('invalid path')
         p = QPainterPath()
         sx, sy = self._elements[0]
-        p.moveTo(sx, sy)
+        if len(self._elements[1]) == 2:
+            # Only add a start point if the QPainterPath will start with a
+            # line, not an arc.
+            p.moveTo(sx, sy)
         for e in self._elements[1:]:
             if len(e) == 2:
                 p.lineTo(*e)
@@ -94,6 +112,10 @@ class Path2d(object):
                 d = r*2
                 sa = degrees(atan2(sy-cy, sx-cx)) % 360.0
                 ea = degrees(atan2(ey-cy, ex-cx)) % 360.0
+                # NOTE: machtool uses a right-handed cartesian coordinate
+                #       system with the Y+ up. Because of this, the QRectF
+                #       used to define the arc has a negative height. This
+                #       makes a positive arc angle sweep cclw as it should.
                 rect = QRectF(cx - r, cy + r, d, -d)
                 if arcDir == 'cclw':
                     span = (ea + 360.0 if ea < sa else ea) - sa
@@ -109,4 +131,3 @@ if __name__ == '__main__':
     p.arcTo(1, 1, 0, 1, 'cclw')
     p.toQPainterPath()
     print p
-    
