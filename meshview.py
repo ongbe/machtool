@@ -132,7 +132,7 @@ class MeshView(GLView):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         if self._mesh:
             self._mesh.render()
-        self.renderXYZ()
+        self.renderAxisIndicator()
     def topView(self, update=False):
         super(MeshView, self).topView(update)
         self.fitMesh()

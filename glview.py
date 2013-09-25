@@ -41,8 +41,8 @@ class GLView(QGLWidget):
                            
     A single light is provided at the fixed point (50, 50, 170).
 
-    A basic xyz axis is rendered in a seperate viewport in the lower left
-    corner. red=X+, green=Y+, blue=Z+.
+    A basic xyz axis indicator is rendered in a seperate viewport in the lower
+    left corner. red=X+, green=Y+, blue=Z+.
 
     A fit method is supplied. The two [x, y] points define the corners of
     the rectangle to fit. The coordinates should be relative to the default
@@ -67,7 +67,9 @@ class GLView(QGLWidget):
     """
     # up, down, left, right arrow key rotation amount
     arrowRotationStep = 15.0
-    axisIndicatorQuadric = glu.gluNewQuadric()
+    # Length of one leg of the axis indicator. The subwindow's scene size
+    # will be twice this.
+    axisLen = 5.0
     def __init__(self, parent):
         super(GLView, self).__init__(parent)
         self.rotCenter = [0.0, 0.0, 0.0]
@@ -105,6 +107,7 @@ class GLView(QGLWidget):
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_SPECULAR, [0.5, 0.5, 1.0, 1.0])
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_SPECULAR, [0.3, 0.3, 1.0, 0.5])
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, [1.0, 1.0, 1.0, 1.0])
+        self.buildAxisIndicator()
     def sizeHint(self):
         return QSize(500, 500)
     def minimumSizeHint(self):
@@ -146,25 +149,72 @@ class GLView(QGLWidget):
         gl.glViewport(0, 0, w, h)
         self.ortho()
         self.updateGL()
-    def renderXYZ(self):
+    def buildAxisIndicator(self):
+        """Assemble the axis indicator into a display list.
+        """
+        # single axis specs
+        bodyLen = GLView.axisLen * 0.75
+        tipLen = GLView.axisLen * 0.25
+        majDia = GLView.axisLen * 0.125
+        slices = 8
+        stacks = 2
+        # build one axis
+        axisId = gl.glGenLists(1)
+        quadric = glu.gluNewQuadric()
+        gl.glNewList(axisId, gl.GL_COMPILE)
+        glu.gluCylinder(quadric, 0.0, majDia, bodyLen, slices, stacks)
+        gl.glPushMatrix()
+        gl.glTranslate(0, 0, bodyLen)
+        glu.gluCylinder(quadric, majDia, 0, tipLen, slices, stacks)
+        gl.glPopMatrix()
+        gl.glEndList()
+        # now assemble all three
+        self.axisIndicatorId = gl.glGenLists(1)
+        gl.glNewList(self.axisIndicatorId, gl.GL_COMPILE)
+        # always lit and smooth shaded with a bit a spec
+        gl.glEnable(gl.GL_LIGHTING)
+        gl.glPolygonMode(gl.GL_FRONT, gl.GL_FILL)
+        gl.glShadeModel(gl.GL_SMOOTH)
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
+                        [1.0, 1.0, 1.0, 1.0])
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SHININESS, 64)
+        # X axis, red
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+                        [0.7, 0.0, 0.0, 1.0])
+        gl.glPushMatrix()
+        gl.glRotate(90, 0, 1, 0)
+        gl.glCallList(axisId)
+        gl.glPopMatrix()
+        # Y axis, green
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+                        [0.0, 0.7, 0.0, 1.0])
+        gl.glPushMatrix()
+        gl.glRotate(-90, 1, 0, 0)
+        gl.glCallList(axisId)
+        gl.glPopMatrix()
+        # Z axis, blue
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+                        [0.0, 0.0, 0.7, 1.0])
+        gl.glCallList(axisId)
+        gl.glEndList()
+    def renderAxisIndicator(self):
         """Render an axis orientation aid.
 
         A small square viewport is created in the lower left corner of the
         view to render into.
         """
-        # Small viewport in lower left corner. 1/8 the view width, minimum 100
-        # pixels.
+        # 1/8 the view width with a minimum of 100 pixels.
         viewportSize = max(self.width() / 8, 100)
         gl.glViewport(0, 0, viewportSize, viewportSize)
-        # set up a 10x10x10 orthographic projection
+        # Set up an orthographic projection whoes size depends on the size of
+        # the axis indicator.
         gl.glMatrixMode(gl.GL_PROJECTION)
         gl.glPushMatrix()
         gl.glLoadIdentity()
-        axisLen = 5.0
         # TODO: understand the near/far clip plane vs the depth buffer
-        gl.glOrtho(-axisLen, axisLen,
-                    -axisLen, axisLen,
-                    -10000.0 - axisLen, .0)
+        gl.glOrtho(-GLView.axisLen, GLView.axisLen,
+                    -GLView.axisLen, GLView.axisLen,
+                    -10000.0 - GLView.axisLen, .0)
         # now render into that viewport
         gl.glMatrixMode(gl.GL_MODELVIEW)
         gl.glPushMatrix()
@@ -177,74 +227,8 @@ class GLView(QGLWidget):
         m = copy(self.modelviewMatrix)
         m[3] = [0.0, 0.0, 0.0, 1.0]
         gl.glMultMatrixf(m)
-        # now render the axes
-        # TODO: display list
-        bodyLen = axisLen * 0.75
-        tipLen = axisLen * 0.25
-        majDia = axisLen * 0.1
-        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
-                        [0.3, 0.3, 1.0, 1.0])
-        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SHININESS, 64)
-        # X axis
-        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
-                        [0.7, 0.0, 0.0, 1.0])
-        gl.glPushMatrix()
-        gl.glRotate(90, 0, 1, 0)
-        glu.gluCylinder(GLView.axisIndicatorQuadric,
-                        0.0,    # base dia @ z=0
-                        majDia, # top dia @ z=height
-                        bodyLen,
-                        16,
-                        2)
-        gl.glPushMatrix()
-        gl.glTranslate(0, 0, bodyLen)
-        glu.gluCylinder(GLView.axisIndicatorQuadric,
-                        majDia,
-                        0,
-                        tipLen,
-                        16,
-                        2)
-        gl.glPopMatrix()
-        gl.glPopMatrix()
-        # Y axis
-        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
-                        [0.0, 0.7, 0.0, 1.0])
-        gl.glPushMatrix()
-        gl.glRotate(-90, 1, 0, 0)
-        glu.gluCylinder(GLView.axisIndicatorQuadric,
-                        0.0,
-                        majDia,
-                        bodyLen,
-                        16,
-                        2)
-        gl.glPushMatrix()
-        gl.glTranslate(0, 0, bodyLen)
-        glu.gluCylinder(GLView.axisIndicatorQuadric,
-                        majDia,
-                        0,
-                        tipLen,
-                        16,
-                        2)
-        gl.glPopMatrix()
-        gl.glPopMatrix()
-        # Z axis
-        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
-                        [0.0, 0.0, 0.7, 1.0])
-        glu.gluCylinder(GLView.axisIndicatorQuadric,
-                        0.0,
-                        majDia,
-                        bodyLen,
-                        16,
-                        2)
-        gl.glPushMatrix()
-        gl.glTranslate(0, 0, bodyLen)
-        glu.gluCylinder(GLView.axisIndicatorQuadric,
-                        majDia,
-                        0,
-                        tipLen,
-                        16,
-                        2)
-        gl.glPopMatrix()
+        # render the indicator
+        gl.glCallList(self.axisIndicatorId)
         # pop the global modelview
         gl.glPopMatrix()
         gl.glMatrixMode(gl.GL_PROJECTION)
@@ -255,7 +239,7 @@ class GLView(QGLWidget):
         gl.glViewport(0, 0, self.width(), self.height())
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-        self.renderXYZ()
+        self.renderAxisIndicator()
     def frontView(self, update=True):
         """Rotate to view the X/Y plane.
         """
