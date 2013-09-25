@@ -54,7 +54,7 @@ class MainWindow(QMainWindow):
         mesh = RevolvedMesh(cprof)
         mesh.addProfile(sprof, (0.5, 0.5, 0.5, 1.0))
         self.meshview.setMesh(mesh)
-        self.meshview.frontView()
+        self.meshview.fitMesh()
     def closeEvent(self, e):
         toolBrowser = self.tdefWidget.toolBrowser
         if toolBrowser.isDirty():
@@ -66,13 +66,16 @@ class MainWindow(QMainWindow):
         if e.key() == qt.Key_Space:
             mesh = RevolvedMesh()
             p = Path2d([0, 0])
-            p.arcTo(1, 1, 0, 1, 'cclw')
-            p.arcTo(2, 2, 2, 1, 'clw')
-            p.arcTo(3, 3, 2, 3, 'cclw')
-            p.lineTo(2, 3.5)
-            p.lineTo(1.5, 3.5)
-            p.arcTo(1.0, 3., 1.5, 3, 'cclw')
-            mesh.addProfile(p.elements(), close=True)
+            p.lineTo(1, .5)
+            p.lineTo(1, .75)
+            p.lineTo(0, 2)
+            # p.arcTo(1, 1, 0, 1, 'cclw')
+            # p.arcTo(2, 2, 2, 1, 'clw')
+            # p.arcTo(3, 3, 2, 3, 'cclw')
+            # p.lineTo(2, 3.5)
+            # p.lineTo(1.5, 3.5)
+            # p.arcTo(1.0, 3., 1.5, 3, 'cclw')
+            mesh.addProfile(p.elements(), close=False)
             self.meshview.setMesh(mesh)
             self.meshview.fitMesh()
             

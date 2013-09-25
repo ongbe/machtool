@@ -112,31 +112,31 @@ class Patch(object):
         """
         self.addTri(a, b, c)
         self.addTri(d, a, c)
-    def addRevLineSeg(self, x1, z1, x2, z2):
+    def addRevLineSeg(self, x1, y1, x2, y2):
         """Add a 360 degree revolved line to this Patch.
 
-        x1, z1 -- start point
-        x2, z2 -- end point
+        x1, y1 -- start point
+        x2, y2 -- end point
 
-        It is assumed the points are in the XZ plane and the axis of
-        revolution is parallel to the vector (0, 0, 1), and passes through the
+        It is assumed the points are in the XY plane and the axis of
+        revolution is parallel to the vector (0, 1, 0), and passes through the
         point (0, 0, 0).
         """
         # tip triangles
         if np.allclose(x1, 0.0):
-            a = [x1, 0.0, z1]
+            a = [x1, y1, 0.0]
             for (sa1, ca1), (sa2, ca2) in self._mesh.sincos:
                 r = x2
-                b = [r * ca2, r * sa2, z2]
-                c = [r * ca1, r * sa1, z2]
-                self.addTri(a, b, c, None if np.allclose(z1, z2) else a)
+                b = [r * sa2, y2, r * ca2]
+                c = [r * sa1, y2, r * ca1]
+                self.addTri(a, b, c, None if np.allclose(y1, y2) else a)
         # shank end triangle fan, p1 = top center
         elif np.allclose(x2, 0.0):
-            a = [x2, 0.0, z2]
+            a = [x2, y2, 0.0]
             for (sa1, ca1), (sa2, ca2) in self._mesh.sincos:
-                b = [x1 * ca1, x1 * sa1, z1]
-                c = [x1 * ca2, x1 * sa2, z1]
-                self.addTri(a, b, c, None if np.allclose(z1, z2) else a)
+                b = [x1 * sa1, y1, x1 * ca1]
+                c = [x1 * sa2, y1, x1 * ca2]
+                self.addTri(a, b, c, None if np.allclose(y1, y2) else a)
         # triangle strip
         # d o--o c
         #   | /|
@@ -144,16 +144,16 @@ class Patch(object):
         # a o--o b
         else:
             for (sa1, ca1), (sa2, ca2) in self._mesh.sincos:
-                self.addQuad([x1 * ca1, x1 * sa1, z1], # a
-                             [x1 * ca2, x1 * sa2, z1], # b
-                             [x2 * ca2, x2 * sa2, z2], # c
-                             [x2 * ca1, x2 * sa1, z2]) # d
-    def addRevArcSeg(self, x1, z1, x2, z2, cx, cz, arcDir):
-        """Add a 360 degree revolved arc to this Patch.
-
-        x1, z1 -- start vertex
-        x2, z2 -- end vertex
-        cx, cz -- center point
+                self.addQuad([x1 * sa1, y1, x1 * ca1], # a
+                             [x1 * sa2, y1, x1 * ca2], # b
+                             [x2 * sa2, y2, x2 * ca2], # c
+                             [x2 * sa1, y2, x2 * ca1]) # d
+    def addRevArcSeg(self, x1, y1, x2, y2, cx, cy, arcDir):  
+        """Add a 360 degree revolved arc to this Patch.      
+                                                             
+        x1, y1 -- start vertex
+        x2, y2 -- end vertex
+        cx, cy -- center point
         arcDir -- 'cclw' or 'clw'
 
         It is assumes the points are in the XZ plane and the axis of
@@ -161,10 +161,10 @@ class Patch(object):
         point (0, 0, 0).
         """
         a = x1 - cx
-        b = z1 - cz
+        b = y1 - cy
         r = sqrt(a*a + b*b)
         arc = Arc.fromVectors(QVector2D(a, b),
-                              QVector2D(x2 - cx, z2 - cz),
+                              QVector2D(x2 - cx, y2 - cy),
                               r,
                               arcDir == 'cclw')
         # TODO: By halving the mesh segs ( * 0.5), fewer triangles are
@@ -183,10 +183,10 @@ class Patch(object):
             sa2 = sin(a2)
             ca2 = cos(a2)
             x1 = cx + r * ca1
-            z1 = cz + r * sa1
+            y1 = cy + r * sa1
             x2 = cx + r * ca2
-            z2 = cz + r * sa2
-            self.addRevLineSeg(x1, z1, x2, z2)
+            y2 = cy + r * sa2
+            self.addRevLineSeg(x1, y1, x2, y2)
             a1 = a2
             sa1 = sa2
             ca1 = ca2
@@ -197,10 +197,10 @@ class Patch(object):
         else:
             a2 = radians(arc.endAngle())
             x1 = cx + r * ca1
-            z1 = cz + r * sa1
+            y1 = cy + r * sa1
             x2 = cx + r * cos(a2)
-            z2 = cz + r * sin(a2)
-            self.addRevLineSeg(x1, z1, x2, z2)
+            y2 = cy + r * sin(a2)
+            self.addRevLineSeg(x1, y1, x2, y2)
     # DEBUG:
     def renderNormals(self):
         gl.glDisable(gl.GL_LIGHTING)
@@ -249,23 +249,23 @@ class Patch(object):
         if self._showNormals:
             self.renderNormals()
     @staticmethod
-    def fromRevLineSeg(x1, z1, x2, z2, mesh):
+    def fromRevLineSeg(x1, y1, x2, y2, mesh):
         """Create a revolved Patch from a line segment.
 
-        x1, z1, x2, z2 -- line start and end coords
+        x1, z1, y2, y2 -- line start and end coords
         mesh -- Mesh, parent
 
         Return a new Patch instance
         """
         patch = Patch(mesh)
-        patch.addRevLineSeg(x1, z1, x2, z2)
+        patch.addRevLineSeg(x1, y1, x2, y2)
         return patch
     @staticmethod
-    def fromRevArcSeg(x1, z1, x2, z2, cx, cz, arcDir, mesh):
+    def fromRevArcSeg(x1, y1, x2, y2, cx, cy, arcDir, mesh):
         """Create a revolved Patch from an arc segment.
 
-        x1, z1 -- arc start point
-        x2, z2 -- arc end point
+        x1, y1 -- arc start point
+        x2, y2 -- arc end point
         cx, cy -- arc center point
         arcDir -- 'cclw' or 'clw'
         mesh -- Mesh, parent
@@ -273,7 +273,7 @@ class Patch(object):
         Return a new Patch instance
         """
         patch = Patch(mesh)
-        patch.addRevArcSeg(x1, z1, x2, z2, cx, cz, arcDir)
+        patch.addRevArcSeg(x1, y1, x2, y2, cx, cy, arcDir)
         return patch
         
 
@@ -494,8 +494,8 @@ class RevolvedMesh(Mesh):
         profile -- a list of tuples as defined in tooldef.py
         color -- [r, g, b, a]
         close -- if True and the profile start or end points are not on
-                 the axis of revolution, insert one with X=0.0 and Z
-                 equal to the start or end point Z.
+                 the axis of revolution, insert one with X=0.0 and Y
+                 equal to the start or end point Y.
         """
         if close:
             e1 = profile[0]     # should always be a point

@@ -6,6 +6,7 @@
 Saturday, September 14 2013
 """
 
+from copy import copy
 from math import sqrt
 
 from PyQt4.QtGui import *
@@ -19,9 +20,29 @@ import numpy as np
 class GLView(QGLWidget):
     """An OpenGL viewer with pan/rotate/zoom + fixed orientation views.
 
+                                top
+                                 |
+                                 V     back
+                                       /
+                                      /
+                                 Y+ |/
+                                 |  
+                                 | 
+                                 |
+                left ->          o------- X+        <- right
+                                /
+                               /
+                              Z+ (out of screen)
+
+                           /|
+                          /     ^
+                         /      |
+                       front  bottom
+                           
     A single light is provided at the fixed point (50, 50, 170).
 
-    A basic xyz axis is rendered at the origin. red=X+, green=Y+, blue=Z+.
+    A basic xyz axis is rendered in a seperate viewport in the lower left
+    corner. red=X+, green=Y+, blue=Z+.
 
     A fit method is supplied. The two [x, y] points define the corners of
     the rectangle to fit. The coordinates should be relative to the default
@@ -30,12 +51,13 @@ class GLView(QGLWidget):
     Default Behavior
     ================
     * Initial view orientation is the default OpenGL X/Y plane. This is the
-      'top' view.
+      'front' view.
     * Mouse wheel zooms in (with shift) and out (with no shift).
     * Left button rotates the scene about rotCenter.
     * Middle button pans the scene.
     * Arrows rotate the scene about the vertical and horizontal axes.
       GLView.arrowRotationStep defaults to 15 degrees.
+      Alt+Left/Right arrow to rotate about the screen Z axis.
     * Visible scene is 10x10 units with the origin at the center.
 
     Default Context Menu
@@ -45,6 +67,7 @@ class GLView(QGLWidget):
     """
     # up, down, left, right arrow key rotation amount
     arrowRotationStep = 15.0
+    axisIndicatorQuadric = glu.gluNewQuadric()
     def __init__(self, parent):
         super(GLView, self).__init__(parent)
         self.rotCenter = [0.0, 0.0, 0.0]
@@ -60,11 +83,11 @@ class GLView(QGLWidget):
         self.setMouseTracking(True)
         self.createContextMenu()
     def setRotCenter(self, p):
-        self.rotCenter = tuple(p)
+        self.rotCenter = p
     # TODO: too lazy
     def createContextMenu(self):
         self.setContextMenuPolicy(qt.ActionsContextMenu)
-        for item in ['Top', 'Bottom', 'Left', 'Right', 'Front', 'Back',
+        for item in ['Front', 'Top', 'Right', 'Back', 'Bottom', 'Left', 
                      'Isometric']:
             a = QAction(item, self)
             eval('self.connect(a, SIGNAL("triggered()"),'
@@ -72,20 +95,16 @@ class GLView(QGLWidget):
             self.addAction(a)
     def initializeGL(self):
         gl.glClearColor(0.0, 0.25, 0.25, 1.0)
+        gl.glFrontFace(gl.GL_CCW) # default
+        gl.glCullFace(gl.GL_BACK)
         gl.glEnable(gl.GL_DEPTH_TEST)
         gl.glEnable(gl.GL_CULL_FACE)
-        # gl.glShadeModel(gl.GL_FLAT)
-        # gl.glEnable(gl.GL_BLEND)
-        # gl.glBlendFunc(gl.GL_SRC_ALPHA, gl.GL_ONE_MINUS_SRC_ALPHA)
-        # gl.glEnable(gl.GL_MULTISAMPLE)
         gl.glEnable(gl.GL_LIGHTING)
         gl.glEnable(gl.GL_LIGHT0)
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_POSITION, [50, 50, 170])
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_SPECULAR, [0.5, 0.5, 1.0, 1.0])
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_SPECULAR, [0.3, 0.3, 1.0, 0.5])
         gl.glLightfv(gl.GL_LIGHT0, gl.GL_DIFFUSE, [1.0, 1.0, 1.0, 1.0])
-        # base class defaults to front view, +X/+Z plane
-        self.topView(False)
     def sizeHint(self):
         return QSize(500, 500)
     def minimumSizeHint(self):
@@ -98,7 +117,7 @@ class GLView(QGLWidget):
         return [2.0 / (projMatrix[0][0] * self.width()),
                 2.0 / (projMatrix[1][1] * self.height())]
     def screenToScene(self, x, y):
-        """Find the scene coordinates of the pixel
+        """Find the scene coordinates of the pixel.
 
         x, y -- pixel coordinates
 
@@ -108,7 +127,7 @@ class GLView(QGLWidget):
         return (self.sceneCenter[0] - self.sceneWidth * 0.5 + pw * x,
                 self.sceneCenter[1] + self.sceneHeight * 0.5 + ph * -y)
     def ortho(self):
-        """Set up the scene's bounds
+        """Set up the scene's visible bounds.
         """
         gl.glMatrixMode(gl.GL_PROJECTION)
         gl.glLoadIdentity()
@@ -127,69 +146,160 @@ class GLView(QGLWidget):
         gl.glViewport(0, 0, w, h)
         self.ortho()
         self.updateGL()
+    def renderXYZ(self):
+        """Render an axis orientation aid.
+
+        A small square viewport is created in the lower left corner of the
+        view to render into.
+        """
+        # Small viewport in lower left corner. 1/8 the view width, minimum 100
+        # pixels.
+        viewportSize = max(self.width() / 8, 100)
+        gl.glViewport(0, 0, viewportSize, viewportSize)
+        # set up a 10x10x10 orthographic projection
+        gl.glMatrixMode(gl.GL_PROJECTION)
+        gl.glPushMatrix()
+        gl.glLoadIdentity()
+        axisLen = 5.0
+        # TODO: understand the near/far clip plane vs the depth buffer
+        gl.glOrtho(-axisLen, axisLen,
+                    -axisLen, axisLen,
+                    -10000.0 - axisLen, .0)
+        # now render into that viewport
+        gl.glMatrixMode(gl.GL_MODELVIEW)
+        gl.glPushMatrix()
+        gl.glLoadIdentity()
+        # Move the indicators origin far away from the origin. This is the
+        # only way I know to keep the mesh from clipping it. Probably need
+        # some sort of overlay buffer.
+        gl.glTranslatef(0.0, 0.0, 10000.0)
+        # only need the rotation of the global matrix, no translation
+        m = copy(self.modelviewMatrix)
+        m[3] = [0.0, 0.0, 0.0, 1.0]
+        gl.glMultMatrixf(m)
+        # now render the axes
+        # TODO: display list
+        bodyLen = axisLen * 0.75
+        tipLen = axisLen * 0.25
+        majDia = axisLen * 0.1
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SPECULAR,
+                        [0.3, 0.3, 1.0, 1.0])
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_SHININESS, 64)
+        # X axis
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+                        [0.7, 0.0, 0.0, 1.0])
+        gl.glPushMatrix()
+        gl.glRotate(90, 0, 1, 0)
+        glu.gluCylinder(GLView.axisIndicatorQuadric,
+                        0.0,    # base dia @ z=0
+                        majDia, # top dia @ z=height
+                        bodyLen,
+                        16,
+                        2)
+        gl.glPushMatrix()
+        gl.glTranslate(0, 0, bodyLen)
+        glu.gluCylinder(GLView.axisIndicatorQuadric,
+                        majDia,
+                        0,
+                        tipLen,
+                        16,
+                        2)
+        gl.glPopMatrix()
+        gl.glPopMatrix()
+        # Y axis
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+                        [0.0, 0.7, 0.0, 1.0])
+        gl.glPushMatrix()
+        gl.glRotate(-90, 1, 0, 0)
+        glu.gluCylinder(GLView.axisIndicatorQuadric,
+                        0.0,
+                        majDia,
+                        bodyLen,
+                        16,
+                        2)
+        gl.glPushMatrix()
+        gl.glTranslate(0, 0, bodyLen)
+        glu.gluCylinder(GLView.axisIndicatorQuadric,
+                        majDia,
+                        0,
+                        tipLen,
+                        16,
+                        2)
+        gl.glPopMatrix()
+        gl.glPopMatrix()
+        # Z axis
+        gl.glMaterialfv(gl.GL_FRONT_AND_BACK, gl.GL_AMBIENT_AND_DIFFUSE,
+                        [0.0, 0.0, 0.7, 1.0])
+        glu.gluCylinder(GLView.axisIndicatorQuadric,
+                        0.0,
+                        majDia,
+                        bodyLen,
+                        16,
+                        2)
+        gl.glPushMatrix()
+        gl.glTranslate(0, 0, bodyLen)
+        glu.gluCylinder(GLView.axisIndicatorQuadric,
+                        majDia,
+                        0,
+                        tipLen,
+                        16,
+                        2)
+        gl.glPopMatrix()
+        # pop the global modelview
+        gl.glPopMatrix()
+        gl.glMatrixMode(gl.GL_PROJECTION)
+        # pop the main viewports projection matrix
+        gl.glPopMatrix()
+        # after these two, we should be back where we started, maybe!
+        gl.glMatrixMode(gl.GL_MODELVIEW)
+        gl.glViewport(0, 0, self.width(), self.height())
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
-        axisLen = 2.0
-        gl.glDisable(gl.GL_LIGHTING)
-        gl.glBegin(gl.GL_LINES)
-        gl.glColor(1, 0, 0)
-        gl.glVertex3f(0, 0, 0)
-        gl.glVertex3f(axisLen, 0, 0)
-        gl.glColor(0, 1, 0)
-        gl.glVertex3f(0, 0, 0)
-        gl.glVertex3f(0, axisLen, 0)
-        gl.glColor(0, 0, 1)
-        gl.glVertex3f(0, 0, 0)
-        gl.glVertex3f(0, 0, axisLen)
-        gl.glEnd()
-        gl.glEnable(gl.GL_LIGHTING)
-    def topView(self, update=True):
+        self.renderXYZ()
+    def frontView(self, update=True):
         """Rotate to view the X/Y plane.
         """
         gl.glLoadIdentity()
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         if update:
             self.updateGL()
-    def bottomView(self, update=True):
-        """Rotate to view the X/-Y plane.
+    def backView(self, update=True):
+        """Rotate to view the -X/Y plane.
         """
         gl.glLoadIdentity()
-        gl.glRotate(180.0, 1.0, 0.0, 0.0)
+        gl.glRotate(180.0, 0.0, 1.0, 0.0)
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         if update:
             self.updateGL()
     def rightView(self, update=True):
-        """Rotate to view the Y/Z plane.
+        """Rotate to view the -Z/Y plane.
         """
         gl.glLoadIdentity()
-        gl.glRotate(-90.0, 1.0, 0.0, 0.0)
-        gl.glRotate(-90.0, 0.0, 0.0, 1.0)
+        gl.glRotate(-90.0, 0.0, 1.0, 0.0)
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         if update:
             self.updateGL()
     def leftView(self, update=True):
-        """Rotate to view the -Y/Z plane.
+        """Rotate to view the Z/Y plane.
         """
         gl.glLoadIdentity()
-        gl.glRotate(-90.0, 1.0, 0.0, 0.0)
-        gl.glRotate(90.0, 0.0, 0.0, 1.0)
+        gl.glRotate(90.0, 0.0, 1.0, 0.0)
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         if update:
             self.updateGL()
-    def frontView(self, update=True):
-        """Rotate to view the X/Z plane.
+    def topView(self, update=True):
+        """Rotate to view the X/Z- plane.
         """
         gl.glLoadIdentity()
-        gl.glRotate(-90.0, 1.0, 0.0, 0.0)
+        gl.glRotate(90.0, 1.0, 0.0, 0.0)
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         if update:
             self.updateGL()
-    def backView(self, update=True):
+    def bottomView(self, update=True):
         """Rotate to view the -X/Z plane.
         """
         gl.glLoadIdentity()
         gl.glRotate(-90.0, 1.0, 0.0, 0.0)
-        gl.glRotate(180.0, 0.0, 0.0, 1.0)
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         if update:
             self.updateGL()
@@ -197,10 +307,12 @@ class GLView(QGLWidget):
     def isometricView(self, update=True):
         """Rotate to an isometric view.
 
+        +Y up, +X right, +Z forward
+
         """
         gl.glLoadIdentity()
-        gl.glRotate(-60.0, 1.0, 0.0, 0.0)
-        gl.glRotate(-45.0, 0.0, 0.0, 1.0)
+        gl.glRotate(30.0, 1.0, 0.0, 0.0)
+        gl.glRotate(-45.0, 0.0, 1.0, 0.0)
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         if update:
             self.updateGL()
@@ -235,7 +347,7 @@ class GLView(QGLWidget):
         self.modelviewMatrix = gl.glGetFloat(gl.GL_MODELVIEW_MATRIX)
         # self.updateGL()
     def pan(self, dx, dy):
-        """Shift the scene origin by dx/dy pixels
+        """Shift the scene origin by dx/dy pixels.
 
         dx, dy -- mouse deltas in pixels
         """

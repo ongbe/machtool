@@ -26,6 +26,9 @@ class MeshView(GLView):
         self.baseRotFactor = self.rotFactor
         self._shadeMode = 'smooth'
         self._showNormals = False
+    def initGL(self):
+        super(MeshView, self).initGL()
+        self.frontView()
     def wheelEvent(self, e):
         """Zoom in/out and adjust the mouse rotation factor.
         """
@@ -34,15 +37,14 @@ class MeshView(GLView):
     # TODO:
     #  * Works well but is probably going to need some tweaking.
     #    * added rotFactor lower bound of 0.05
-    def _setRotFactor(self):
+    def _setRotFactor(self, bbox=None):
         """Adjust the mouse rotation factor.
 
         The factor is computed based on how much of the mesh is visible and
         how deep into the scene it extends.
         """
         if self._mesh:
-            bbox = self.getMeshSceneBBox()
-            w, h, d = bbox.size()
+            w, h, d = (bbox or self.getMeshSceneBBox()).size()
             # mesh is fully in view
             if self.sceneHeight >= h and self.sceneWidth > w:
                 if d > w+h:
@@ -115,13 +117,8 @@ class MeshView(GLView):
         """
         mappedVerts = []
         for meshVert in self._mesh.sharedVertices():
-            # mv = np.array(meshVert + [1.0])
-            # nm = self.modelviewMatrix * mv
-            # diag = nm.diagonal()
-            # v = diag[:3]
             mappedVerts.append(self.mxv(self.modelviewMatrix,
                                         meshVert + [1.0])[:3])
-            # mappedVerts.append(self.mxv(self.modelviewMatrix, meshVert))
         bbox = BBox.fromVertices(mappedVerts)
         return bbox
     def fitMesh(self):
@@ -130,11 +127,12 @@ class MeshView(GLView):
         bbox = self.getMeshSceneBBox()
         # fit calls updateGL()
         self.fit(bbox.leftTop(), bbox.rightBottom())
-        self._setRotFactor()
+        self._setRotFactor(bbox)
     def paintGL(self):
         gl.glClear(gl.GL_COLOR_BUFFER_BIT | gl.GL_DEPTH_BUFFER_BIT)
         if self._mesh:
             self._mesh.render()
+        self.renderXYZ()
     def topView(self, update=False):
         super(MeshView, self).topView(update)
         self.fitMesh()

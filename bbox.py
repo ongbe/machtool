@@ -132,12 +132,11 @@ class BBox(object):
         bottom = self.bottom()
         front = self.front()
         back = self.back()
-        return np.array(((left, front, bottom),
-                         (right, front, bottom),
-                         (right, front, top),
-                         (left, front, top),
-                         (left, back, bottom),
-                         (right, back, bottom),
-                         (right, back, top),
-                         (left, back, top)))
-                
+        return [[left, front, bottom],
+                [right, front, bottom],
+                [right, front, top],
+                [left, front, top],
+                [left, back, bottom],
+                [right, back, bottom],
+                [right, back, top],
+                [left, back, top]]
